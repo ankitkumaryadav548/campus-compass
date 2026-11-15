@@ -1,0 +1,79 @@
+/* app/globals.css
+   Design system base styles – imported once in layout.jsx
+   All tokens are defined in tailwind.config.js (Tailwind v3).
+*/
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Base layer: typography & scrollbar ───────────────────────────────── */
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  /* Headings */
+  h1 { @apply text-4xl font-bold tracking-tight; }
+  h2 { @apply text-3xl font-bold tracking-tight; }
+  h3 { @apply text-2xl font-semibold; }
+  h4 { @apply text-xl font-semibold; }
+  h5 { @apply text-lg font-medium; }
+  h6 { @apply text-base font-medium; }
+
+  /* Smooth scrollbar */
+  ::-webkit-scrollbar       { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { @apply bg-slate-100 dark:bg-slate-800; }
+  ::-webkit-scrollbar-thumb { @apply bg-slate-300 dark:bg-slate-600 rounded-full; }
+  ::-webkit-scrollbar-thumb:hover { @apply bg-primary-400; }
+}
+
+/* ── Component layer: reusable class shortcuts ───────────────────────── */
+@layer components {
+  /* Gradient text helper */
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-violet-600;
+  }
+
+  /* Gradient text – dark mode readable */
+  .dark .text-gradient {
+    @apply from-indigo-400 to-violet-400;
+  }
+
+  /* Section container */
+  .section-container {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+  }
+
+  /* Gradient background blob – purely decorative */
+  .blob {
+    @apply absolute rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-3xl opacity-30 animate-blob;
+  }
+}
+
+/* ── Utility layer: extra utilities ──────────────────────────────────── */
+@layer utilities {
+  /* Shimmer animation for Skeleton component */
+  .animate-shimmer {
+    animation: shimmer 1.6s infinite linear;
+    background: linear-gradient(
+      to right,
+      transparent 0%,
+      rgba(255, 255, 255, 0.5) 50%,
+      transparent 100%
+    );
+    background-size: 468px 100%;
+  }
+
+  /* Safe area padding for mobile bottom nav */
+  .safe-area-pb {
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+}
+

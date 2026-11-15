@@ -1,0 +1,11 @@
+// API Route stub – buddies
+import { NextResponse } from "next/server";
+
+export async function GET() {
+  return NextResponse.json({ message: "Not yet implemented" }, { status: 501 });
+}
+
+export async function POST() {
+  return NextResponse.json({ message: "Not yet implemented" }, { status: 501 });
+}
+
