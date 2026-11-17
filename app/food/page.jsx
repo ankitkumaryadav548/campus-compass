@@ -13,7 +13,7 @@ export default async function FoodPage() {
     <AppShell>
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-8 shadow-card">
         <EmptyState
-          icon={Utensils}
+          icon={<Utensils size={32} />}
           title="Food Finder – Coming Soon"
           description="Discover groceries and restaurants filtered by cuisine, diet tags, and home country."
         />

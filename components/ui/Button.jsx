@@ -1,28 +1,31 @@
 // components/ui/Button.jsx
 "use client";
 
+import { isValidElement } from "react";
 import { cn } from "@/lib/utils";
 import { Loader2 } from "lucide-react";
 
-/**
- * Button – design-system primary interactive element.
- *
- * Variants: primary | secondary | ghost | danger
- * Sizes:    sm | md | lg
- * Props:    leftIcon, rightIcon, loading, disabled, as (element override)
- */
 export default function Button({
   children,
   variant = "primary",
   size = "md",
-  leftIcon: LeftIcon,
-  rightIcon: RightIcon,
+  leftIcon,
+  rightIcon,
   loading = false,
   disabled = false,
   className,
   as: Tag = "button",
   ...props
 }) {
+  const iconDefaultSize = size === "sm" ? 14 : size === "lg" ? 20 : 16;
+
+  const renderIcon = (icon) => {
+    if (!icon) return null;
+    if (isValidElement(icon)) return icon;
+    const IconComponent = icon;
+    return <IconComponent size={iconDefaultSize} aria-hidden="true" />;
+  };
+
   const base = [
     // Layout & transitions
     "inline-flex items-center justify-center gap-2 font-semibold rounded-xl",
@@ -74,12 +77,10 @@ export default function Button({
       {loading ? (
         <Loader2 className="animate-spin" size={16} aria-hidden="true" />
       ) : (
-        LeftIcon && <LeftIcon size={size === "sm" ? 14 : size === "lg" ? 20 : 16} aria-hidden="true" />
+        renderIcon(leftIcon)
       )}
       {children}
-      {!loading && RightIcon && (
-        <RightIcon size={size === "sm" ? 14 : size === "lg" ? 20 : 16} aria-hidden="true" />
-      )}
+      {!loading && renderIcon(rightIcon)}
     </Tag>
   );
 }

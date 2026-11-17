@@ -1,6 +1,7 @@
 // components/ui/Input.jsx
 "use client";
 
+import { isValidElement } from "react";
 import { cn } from "@/lib/utils";
 import { AlertCircle } from "lucide-react";
 
@@ -33,7 +34,7 @@ export function Input({
       <div className="relative">
         {LeftIcon && (
           <div className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-400">
-            <LeftIcon size={16} aria-hidden="true" />
+            {isValidElement(LeftIcon) ? LeftIcon : <LeftIcon size={16} aria-hidden="true" />}
           </div>
         )}
 

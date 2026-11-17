@@ -27,7 +27,7 @@ export default async function AdminPage() {
 
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-8 shadow-card">
           <EmptyState
-            icon={ShieldAlert}
+            icon={<ShieldAlert size={32} />}
             title="Admin CRUD Management"
             description="Role-protected management for Guides, Food Places, Campus Events, and Checklist Items will be implemented in Module 10."
           />

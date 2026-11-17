@@ -16,6 +16,8 @@ const ChecklistItemSchema = new Schema(
     deadlineOffsetDays: { type: Number, default: 30 },
     // Display order in the checklist UI
     order:              { type: Number, default: 0 },
+    // Links item to a guide page when non-null (e.g. "sim" → /guides/sim)
+    guideCategory:      { type: String, enum: ["sim", "bank", null], default: null },
     isSample:           { type: Boolean, default: false },
   },
   { timestamps: true }

@@ -1,6 +1,7 @@
 // components/ui/Card.jsx
 // Flexible card container used throughout the app.
 
+import { isValidElement } from "react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -56,7 +57,7 @@ export default function Card({
             iconColor
           )}
         >
-          <Icon size={22} aria-hidden="true" />
+          {isValidElement(Icon) ? Icon : <Icon size={22} aria-hidden="true" />}
         </div>
       )}
 

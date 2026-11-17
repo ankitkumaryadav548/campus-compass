@@ -117,7 +117,8 @@ userId, guideId, completedSteps[Number]
 
 ### ChecklistItem
 ```
-title, description, region[], deadlineOffsetDays, order
+title, description, region[], deadlineOffsetDays, order,
+guideCategory (enum: "sim" | "bank" | null) – links item to its guide page
 ```
 
 ### UserChecklist
@@ -269,6 +270,11 @@ Semantic HTML, alt text, aria-labels, keyboard navigation, sufficient contrast.
 - Keep components small, reusable, and well named. Add short comments.
 - Use `$addToSet` / `$pull` for array updates; use `.lean()` for read-only queries.
 - No hardcoded country names in logic; only in seed data.
+- Never pass component references (such as lucide icons) as props from a
+  Server Component to a Client Component. Pass rendered elements instead,
+  for example icon={<Users size={20} />}.
+- Do not run "npm run build" while the dev server is running. Run it only
+  when I ask for a production build.
 
 ---
 
@@ -289,6 +295,20 @@ Semantic HTML, alt text, aria-labels, keyboard navigation, sufficient contrast.
 - **At the end of each prompt:** list the files created/changed and tell how to run and test it.
 - If something is unclear, make a sensible assumption and state it.
 - Reuse the design system and components from earlier prompts.
+
+---
+
+## 11. CODE STYLE (write like an experienced human developer, not a template)
+
+- Use natural, specific names (handleProfileSubmit, countryOptions, isStepValid). Avoid generic names like data1, temp, result2, handleClick2, processData.
+- Comment only when the reason is not obvious from the code. No comment on every line. No banner comments like "// ===== SECTION =====". No JSDoc on trivial functions. Short, plain English comments.
+- No unused imports, no unused variables, no commented-out code, no leftover console.log (keep console.error only for real server errors).
+- No placeholder text: no "Lorem ipsum", "foo/bar", "TODO: implement". Write real, friendly copy aimed at international students.
+- No emojis in code, logs or comments (UI copy may use them sparingly).
+- Keep it simple: do not create helpers, wrappers or config for something used only once. Prefer plain, readable logic over clever one-liners.
+- Keep functions short and files focused. Split a file when it gets long (roughly 250+ lines), not earlier.
+- Error messages must be realistic and specific ("Please enter a valid arrival date"), not generic ("An error occurred").
+- Formatting must be consistent across the whole project.
 
 ---
 

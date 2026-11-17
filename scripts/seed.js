@@ -82,6 +82,7 @@ const ChecklistItemSchema = new mongoose.Schema(
     region:             [String],
     deadlineOffsetDays: { type: Number, default: 30 },
     order:              { type: Number, default: 0 },
+    guideCategory:      { type: String, enum: ["sim", "bank", null], default: null },
     isSample:           { type: Boolean, default: false },
   },
   { timestamps: true }
@@ -543,8 +544,8 @@ async function seed() {
     // ALL
     { title: "[SAMPLE] University Enrollment & Registration",    description: "Complete your enrollment in the university system and collect your student ID.", region: ["ALL"], deadlineOffsetDays: 1,  order: 1,  isSample: true },
     { title: "[SAMPLE] FRRO / FRO Registration",                 description: "Foreign Regional Registration Office (FRRO) registration is mandatory for most student visa holders. Do this within 14 days of arrival.", region: ["ALL"], deadlineOffsetDays: 14, order: 2,  isSample: true },
-    { title: "[SAMPLE] Get a SIM Card",                          description: "A local SIM card is essential for banking, campus apps, and staying connected.", region: ["ALL"], deadlineOffsetDays: 3,  order: 3,  isSample: true },
-    { title: "[SAMPLE] Open a Bank Account",                     description: "Required for receiving stipends, paying fees, and day-to-day expenses.", region: ["ALL"], deadlineOffsetDays: 21, order: 4,  isSample: true },
+    { title: "[SAMPLE] Get a SIM Card",                          description: "A local SIM card is essential for banking, campus apps, and staying connected.", region: ["ALL"], deadlineOffsetDays: 3,  order: 3,  isSample: true, guideCategory: "sim" },
+    { title: "[SAMPLE] Open a Bank Account",                     description: "Required for receiving stipends, paying fees, and day-to-day expenses.", region: ["ALL"], deadlineOffsetDays: 21, order: 4,  isSample: true, guideCategory: "bank" },
     { title: "[SAMPLE] Obtain Student ID Card",                  description: "Collect your student ID from the registrar's office. Needed for library, lab, and discounts.", region: ["ALL"], deadlineOffsetDays: 5,  order: 5,  isSample: true },
     { title: "[SAMPLE] Submit Hostel / Address Proof",           description: "Submit your accommodation details to the university's international office.", region: ["ALL"], deadlineOffsetDays: 7,  order: 6,  isSample: true },
     { title: "[SAMPLE] Health Insurance or Medical Check",        description: "Confirm you have adequate health insurance and complete any mandatory medical screening.", region: ["ALL"], deadlineOffsetDays: 14, order: 7,  isSample: true },

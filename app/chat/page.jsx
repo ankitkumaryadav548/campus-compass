@@ -13,7 +13,7 @@ export default async function ChatPage() {
     <AppShell>
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-8 shadow-card">
         <EmptyState
-          icon={MessageSquare}
+          icon={<MessageSquare size={32} />}
           title="AI Student Assistant – Coming Soon"
           description="Ask questions about SIMs, banking, campus procedures, and food with context from your home country."
         />

@@ -13,7 +13,7 @@ export default async function CommunityPage() {
     <AppShell>
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-8 shadow-card">
         <EmptyState
-          icon={Users}
+          icon={<Users size={32} />}
           title="Community & Buddy Matching – Coming Soon"
           description="Connect with senior mentors from your country, attend international student events, and join peer groups."
         />
