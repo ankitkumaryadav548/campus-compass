@@ -13,10 +13,8 @@
 const mongoose = require("mongoose");
 const bcrypt   = require("bcryptjs");
 
-// ── Campus constants – edit these to match the target university ───────────
-const CAMPUS_NAME = "Sample City University";     // fictional
-const CAMPUS_LAT  = 28.6139;                       // placeholder (New Delhi area)
-const CAMPUS_LNG  = 77.2090;
+// ── Campus constants – single source of truth from lib/campus.js ───────────
+const { CAMPUS_NAME, CAMPUS_LAT, CAMPUS_LNG } = require("../lib/campus");
 
 // ── MongoDB connection ─────────────────────────────────────────────────────
 const MONGODB_URI = process.env.MONGODB_URI;
@@ -120,6 +118,7 @@ const EventSchema = new mongoose.Schema(
     date:        { type: Date, required: true },
     region:      [String],
     location:    { type: String, default: "" },
+    attendees:   [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
     isSample:    { type: Boolean, default: false },
   },
   { timestamps: true }
@@ -129,13 +128,28 @@ EventSchema.index({ region: 1 });
 // ── BuddyMatch ──
 const BuddyMatchSchema = new mongoose.Schema(
   {
-    studentId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
-    buddyId:   { type: mongoose.Schema.Types.ObjectId, ref: "User" },
-    status:    { type: String, enum: ["pending", "accepted", "declined"], default: "pending" },
-    message:   { type: String, default: "" },
+    studentId:   { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    buddyId:     { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    status:      { type: String, enum: ["pending", "accepted", "declined", "cancelled"], default: "pending" },
+    message:     { type: String, default: "" },
+    respondedAt: Date,
   },
   { timestamps: true }
 );
+BuddyMatchSchema.index({ studentId: 1, buddyId: 1 }, { unique: true });
+
+// ── Message ──
+const MessageSchema = new mongoose.Schema(
+  {
+    matchId:   { type: mongoose.Schema.Types.ObjectId, ref: "BuddyMatch", required: true },
+    senderId:  { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    text:      { type: String, required: true, trim: true },
+    createdAt: { type: Date, default: Date.now },
+    readAt:    { type: Date, default: null },
+  },
+  { timestamps: false }
+);
+MessageSchema.index({ matchId: 1, createdAt: 1 });
 
 // ── UserChecklist ──
 const UserChecklistSchema = new mongoose.Schema(
@@ -166,6 +180,7 @@ const ChecklistItem = mongoose.models.ChecklistItem || mongoose.model("Checklist
 const Place         = mongoose.models.Place         || mongoose.model("Place",         PlaceSchema);
 const Event         = mongoose.models.Event         || mongoose.model("Event",         EventSchema);
 const BuddyMatch    = mongoose.models.BuddyMatch    || mongoose.model("BuddyMatch",    BuddyMatchSchema);
+const Message       = mongoose.models.Message       || mongoose.model("Message",       MessageSchema);
 const UserChecklist = mongoose.models.UserChecklist || mongoose.model("UserChecklist", UserChecklistSchema);
 const GuideProgress = mongoose.models.GuideProgress || mongoose.model("GuideProgress", GuideProgressSchema);
 
@@ -192,15 +207,16 @@ async function seed() {
 
   // ── 1. WIPE ONLY SAMPLE DATA (idempotent) ─────────────────────────────
   console.log("🗑   Removing previous sample data…");
-  const [dU, dG, dC, dP, dE, dBM, dUC, dGP] = await Promise.all([
+  const [dU, dG, dC, dP, dE, dBM, dM, dUC, dGP] = await Promise.all([
     User.deleteMany({ isSample: true }),
     Guide.deleteMany({ isSample: true }),
     ChecklistItem.deleteMany({ isSample: true }),
     Place.deleteMany({ isSample: true }),
     Event.deleteMany({ isSample: true }),
-    BuddyMatch.deleteMany({}),          // BuddyMatch has no isSample – safe to clear all sample ones by cascading after user delete
-    UserChecklist.deleteMany({}),       // same – cleared as users are deleted
-    GuideProgress.deleteMany({}),       // same
+    BuddyMatch.deleteMany({}),
+    Message.deleteMany({}),
+    UserChecklist.deleteMany({}),
+    GuideProgress.deleteMany({}),
   ]);
   console.log(`    Deleted: Users(${dU.deletedCount}) Guides(${dG.deletedCount}) ChecklistItems(${dC.deletedCount}) Places(${dP.deletedCount}) Events(${dE.deletedCount})\n`);
 
@@ -739,6 +755,39 @@ async function seed() {
 
   const buddyMatches = await BuddyMatch.insertMany(buddyMatchesData);
   console.log(`    ✓  ${buddyMatches.length} buddy matches inserted\n`);
+
+  // ── 9. SAMPLE MESSAGES ────────────────────────────────────────────────
+  console.log("💬  Inserting sample messages…");
+  const mosesDavidMatch = buddyMatches.find(
+    (bm) => bm.studentId.toString() === moses._id.toString() && bm.buddyId.toString() === david._id.toString()
+  );
+
+  const sampleMessagesData = [
+    {
+      matchId:   mosesDavidMatch._id,
+      senderId:  moses._id,
+      text:      "Hi David, thanks for accepting my connection request! I just arrived on campus yesterday.",
+      createdAt: daysAgo(2),
+      readAt:    daysAgo(2),
+    },
+    {
+      matchId:   mosesDavidMatch._id,
+      senderId:  david._id,
+      text:      "Welcome to campus Moses! Great to meet a fellow Ugandan here. Let me know if you need any help with your SIM or opening a bank account.",
+      createdAt: daysAgo(1),
+      readAt:    daysAgo(1),
+    },
+    {
+      matchId:   mosesDavidMatch._id,
+      senderId:  moses._id,
+      text:      "Thank you! Which bank branch near Block A is best for international students?",
+      createdAt: new Date(Date.now() - 3600000), // 1 hour ago
+      readAt:    null,
+    },
+  ];
+
+  const messages = await Message.insertMany(sampleMessagesData);
+  console.log(`    ✓  ${messages.length} messages inserted\n`);
 
   // ── SUMMARY ───────────────────────────────────────────────────────────
   console.log("─".repeat(55));

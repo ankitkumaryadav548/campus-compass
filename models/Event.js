@@ -13,6 +13,7 @@ const EventSchema = new Schema(
     // region[] – same fallback chain: country → regionGroup → "ALL"
     region:      [{ type: String, trim: true }],
     location:    { type: String, trim: true, default: "" },
+    attendees:   [{ type: Schema.Types.ObjectId, ref: "User" }],
     isSample:    { type: Boolean, default: false },
   },
   { timestamps: true }

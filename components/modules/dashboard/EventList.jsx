@@ -22,7 +22,7 @@ export default function EventList({ events }) {
         </div>
 
         <Link
-          href="/community"
+          href="/community?tab=events"
           className="text-xs font-semibold text-primary-600 dark:text-primary-400 hover:underline flex items-center gap-1 min-h-[36px]"
         >
           All events <ArrowRight size={13} />
@@ -37,9 +37,10 @@ export default function EventList({ events }) {
             const dayStr = eventDate.getDate();
 
             return (
-              <div
+              <Link
                 key={event._id.toString()}
-                className="p-3.5 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex items-center gap-3.5"
+                href="/community?tab=events"
+                className="p-3.5 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex items-center gap-3.5 hover:border-primary-400 dark:hover:border-primary-600 transition-all block group"
               >
                 <div className="w-12 h-12 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center shrink-0 shadow-sm text-center">
                   <span className="text-[10px] font-bold text-primary-600 uppercase tracking-wider">
@@ -61,7 +62,7 @@ export default function EventList({ events }) {
                     </p>
                   )}
                 </div>
-              </div>
+              </Link>
             );
           })}
         </div>

@@ -37,7 +37,7 @@ export default function FoodCards({ places, userDiet }) {
           {places.map((place) => (
             <Link
               key={place._id.toString()}
-              href="/food"
+              href={`/food?place=${place._id.toString()}`}
               className="p-3.5 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 hover:border-primary-400 dark:hover:border-primary-600 transition-all block group"
             >
               <div className="flex items-start justify-between gap-1 mb-1.5">

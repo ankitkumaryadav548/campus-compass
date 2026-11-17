@@ -32,7 +32,7 @@ export default function BuddyList({ buddies, userLanguages, userCountry }) {
         </div>
 
         <Link
-          href="/community"
+          href="/community?tab=buddies"
           className="text-xs font-semibold text-primary-600 dark:text-primary-400 hover:underline flex items-center gap-1 min-h-[36px]"
         >
           View community <ArrowRight size={13} />
@@ -45,9 +45,10 @@ export default function BuddyList({ buddies, userLanguages, userCountry }) {
             const isSameCountry = userCountry && buddy.country === userCountry;
 
             return (
-              <div
+              <Link
                 key={buddy._id.toString()}
-                className="p-3.5 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex items-start gap-3"
+                href="/community?tab=buddies"
+                className="p-3.5 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex items-start gap-3 hover:border-primary-400 dark:hover:border-primary-600 transition-all block group"
               >
                 <div className="w-9 h-9 rounded-full bg-gradient-primary flex items-center justify-center text-white text-xs font-bold shrink-0 shadow-sm">
                   {getInitials(buddy.name)}
@@ -89,7 +90,7 @@ export default function BuddyList({ buddies, userLanguages, userCountry }) {
                     </div>
                   )}
                 </div>
-              </div>
+              </Link>
             );
           })}
         </div>

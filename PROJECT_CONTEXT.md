@@ -134,12 +134,19 @@ countryTags[], address, location{lat,lng}, rating, reviews[]
 
 ### BuddyMatch
 ```
-studentId, buddyId, status (pending|accepted|declined)
+studentId, buddyId, status (pending|accepted|declined|cancelled), message, respondedAt
+(unique compound index on studentId + buddyId)
+```
+
+### Message
+```
+matchId, senderId, text (1 to 500 chars), createdAt, readAt
+(compound index on matchId + createdAt)
 ```
 
 ### Event
 ```
-title, description, date, region[], location
+title, description, date, region[], location, attendees[]
 ```
 
 > **Note:** Use `mongoose.models.X || mongoose.model(...)` to avoid model recompile errors.
