@@ -3,7 +3,7 @@
 // Leaflet map component with customized vector markers by place type,
 // campus anchor marker, interactive popups, and auto-fit bounding.
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -12,8 +12,8 @@ import { CAMPUS_NAME } from "@/lib/campus";
 
 // Custom SVG-based divIcons to avoid bundler image path bugs and provide distinct type styling
 function createCustomPin(type, isSelected = false) {
-  let bgColor = "#f59e0b"; // restaurant (amber)
-  let label = "R";
+  let bgColor = "#8b5cf6"; // specialty / other (purple)
+  let label = "P";
 
   if (type === "grocery") {
     bgColor = "#10b981"; // grocery (emerald)
@@ -21,6 +21,9 @@ function createCustomPin(type, isSelected = false) {
   } else if (type === "cafeteria") {
     bgColor = "#3b82f6"; // cafeteria (blue)
     label = "C";
+  } else if (type === "restaurant") {
+    bgColor = "#f59e0b"; // restaurant (amber)
+    label = "R";
   }
 
   const size = isSelected ? 38 : 30;
@@ -95,6 +98,21 @@ function createCampusPin() {
 function MapViewController({ places, selectedPlace, campusCoords }) {
   const map = useMap();
 
+  // Invalidate size when container dimensions change (e.g. mobile toggle or screen resize)
+  useEffect(() => {
+    const container = map.getContainer();
+    if (!container || typeof ResizeObserver === "undefined") return;
+
+    const observer = new ResizeObserver(() => {
+      map.invalidateSize();
+    });
+    observer.observe(container);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [map]);
+
   useEffect(() => {
     if (selectedPlace?.location?.lat != null && selectedPlace?.location?.lng != null) {
       map.flyTo([selectedPlace.location.lat, selectedPlace.location.lng], 16, {
@@ -131,9 +149,26 @@ export default function FoodMap({
   campusCoords,
 }) {
   const campusIcon = useMemo(() => createCampusPin(), []);
+  const containerRef = useRef(null);
+
+  // In Fast Refresh or unmount, ensure any leaflet-container has its _leaflet_id cleared if orphaned
+  useEffect(() => {
+    const el = containerRef.current;
+    return () => {
+      if (el) {
+        const leafletEl = el.querySelector(".leaflet-container");
+        if (leafletEl && leafletEl._leaflet_id) {
+          delete leafletEl._leaflet_id;
+        }
+      }
+    };
+  }, []);
 
   return (
-    <div className="relative w-full h-[400px] lg:h-[580px] rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-card">
+    <div
+      ref={containerRef}
+      className="relative w-full h-[400px] lg:h-[580px] rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-card"
+    >
       <MapContainer
         center={[campusCoords.lat, campusCoords.lng]}
         zoom={14}
@@ -239,6 +274,10 @@ export default function FoodMap({
         <div className="flex items-center gap-2">
           <span className="w-2.5 h-2.5 rounded-full bg-blue-500 shrink-0" />
           <span className="text-slate-700 dark:text-slate-300">Cafeteria</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="w-2.5 h-2.5 rounded-full bg-purple-500 shrink-0" />
+          <span className="text-slate-700 dark:text-slate-300">Specialty</span>
         </div>
       </div>
     </div>

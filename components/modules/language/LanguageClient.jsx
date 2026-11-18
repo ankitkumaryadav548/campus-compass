@@ -17,7 +17,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/Toast";
 import Card from "@/components/ui/Card";
-import Input from "@/components/ui/Input";
+import { Input } from "@/components/ui/Input";
 import EmptyState from "@/components/ui/EmptyState";
 
 export default function LanguageClient({ phraseGroups, campusGlossary }) {
