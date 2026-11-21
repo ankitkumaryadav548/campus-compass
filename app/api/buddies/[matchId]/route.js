@@ -4,13 +4,15 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { connectDB } from "@/lib/mongodb";
 import BuddyMatch from "@/models/BuddyMatch";
+import User from "@/models/User";
 import { MAX_ACTIVE_STUDENTS_PER_BUDDY } from "@/lib/community";
+import { notifyRequestResponse, clearRequestNotification } from "@/lib/notifications";
 
 export async function PATCH(request, { params }) {
   const session = await getServerSession(authOptions);
   if (!session?.user) {
     return NextResponse.json(
-      { error: "Please sign in to respond to buddy requests." },
+      { error: "Please sign in to respond to connection requests." },
       { status: 401 }
     );
   }
@@ -62,12 +64,14 @@ export async function PATCH(request, { params }) {
     }
 
     const userId = (session.user.id || session.user._id).toString();
+    const requesterId = (match.requesterId || match.studentId)?.toString();
+    const recipientId = (match.recipientId || match.buddyId)?.toString();
 
-    // Student cancelling their own request
+    // Requester cancelling their own request
     if (action === "cancel") {
-      if (match.studentId.toString() !== userId) {
+      if (requesterId !== userId) {
         return NextResponse.json(
-          { error: "Only the student who initiated this request may cancel it." },
+          { error: "Only the person who initiated this request may cancel it." },
           { status: 403 }
         );
       }
@@ -76,35 +80,44 @@ export async function PATCH(request, { params }) {
       match.respondedAt = new Date();
       await match.save();
 
+      try {
+        await clearRequestNotification(match);
+      } catch (notifErr) {
+        console.error("clearRequestNotification failed:", notifErr);
+      }
+
       return NextResponse.json({
         message: "Connection request cancelled.",
         status: "cancelled",
       });
     }
 
-    // Buddy accepting or declining
+    // Recipient accepting or declining
     if (action === "accept" || action === "decline") {
-      if (match.buddyId.toString() !== userId) {
+      if (recipientId !== userId) {
         return NextResponse.json(
-          { error: "Only the designated senior buddy may accept or decline this request." },
+          { error: "Only the recipient may accept or decline this request." },
           { status: 403 }
         );
       }
 
       if (action === "accept") {
-        // Enforce buddy active connection capacity
-        const currentActiveCount = await BuddyMatch.countDocuments({
-          buddyId: userId,
-          status: "accepted",
-        });
+        // Enforce 5-connection limit ONLY when recipient is a senior
+        const recipientUser = await User.findById(userId).select("isSenior").lean();
+        if (recipientUser?.isSenior) {
+          const currentActiveCount = await BuddyMatch.countDocuments({
+            $or: [{ requesterId: userId }, { recipientId: userId }],
+            status: "accepted",
+          });
 
-        if (currentActiveCount >= MAX_ACTIVE_STUDENTS_PER_BUDDY) {
-          return NextResponse.json(
-            {
-              error: `You have reached your limit of ${MAX_ACTIVE_STUDENTS_PER_BUDDY} active connections.`,
-            },
-            { status: 400 }
-          );
+          if (currentActiveCount >= MAX_ACTIVE_STUDENTS_PER_BUDDY) {
+            return NextResponse.json(
+              {
+                error: `You have reached your limit of ${MAX_ACTIVE_STUDENTS_PER_BUDDY} active connections.`,
+              },
+              { status: 400 }
+            );
+          }
         }
 
         match.status = "accepted";
@@ -114,6 +127,12 @@ export async function PATCH(request, { params }) {
 
       match.respondedAt = new Date();
       await match.save();
+
+      try {
+        await notifyRequestResponse(match, match.status === "accepted");
+      } catch (notifErr) {
+        console.error("notifyRequestResponse failed:", notifErr);
+      }
 
       return NextResponse.json({
         message: `Connection request ${match.status}.`,

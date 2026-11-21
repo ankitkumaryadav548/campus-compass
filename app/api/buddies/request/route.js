@@ -6,15 +6,17 @@ import { connectDB } from "@/lib/mongodb";
 import User from "@/models/User";
 import BuddyMatch from "@/models/BuddyMatch";
 import {
-  MAX_PENDING_REQUESTS_PER_STUDENT,
+  MAX_PENDING_REQUESTS_PER_USER,
   MAX_ACTIVE_STUDENTS_PER_BUDDY,
+  generatePairKey,
 } from "@/lib/community";
+import { notifyBuddyRequest } from "@/lib/notifications";
 
 export async function POST(request) {
   const session = await getServerSession(authOptions);
   if (!session?.user) {
     return NextResponse.json(
-      { error: "Please sign in to send buddy requests." },
+      { error: "Please sign in to send connection requests." },
       { status: 401 }
     );
   }
@@ -29,25 +31,26 @@ export async function POST(request) {
     );
   }
 
-  const { buddyId, message = "" } = body;
+  const recipientId = body.recipientId || body.buddyId;
 
-  if (!buddyId || !mongoose.Types.ObjectId.isValid(buddyId)) {
+  if (!recipientId || !mongoose.Types.ObjectId.isValid(recipientId)) {
     return NextResponse.json(
-      { error: "Please provide a valid buddy ID." },
+      { error: "Please provide a valid recipient ID." },
       { status: 400 }
     );
   }
 
-  const userId = session.user.id || session.user._id;
+  const userId = (session.user.id || session.user._id).toString();
 
-  if (userId.toString() === buddyId.toString()) {
+  if (userId === recipientId.toString()) {
     return NextResponse.json(
       { error: "You cannot send a connection request to yourself." },
       { status: 400 }
     );
   }
 
-  if (typeof message !== "string" || message.trim().length > 300) {
+  const message = typeof body.message === "string" ? body.message.trim() : "";
+  if (message.length > 300) {
     return NextResponse.json(
       { error: "Message must be text under 300 characters." },
       { status: 400 }
@@ -57,80 +60,107 @@ export async function POST(request) {
   try {
     await connectDB();
 
-    // Verify buddy exists and is a senior volunteer
-    const buddyUser = await User.findOne({ _id: buddyId, isSenior: true });
-    if (!buddyUser) {
+    // Verify recipient exists, is onboarded, openToConnect, and not an admin
+    const recipientUser = await User.findOne({
+      _id: recipientId,
+      onboardingDone: true,
+      openToConnect: { $ne: false },
+      role: { $in: ["student", "buddy"] },
+    });
+
+    if (!recipientUser) {
       return NextResponse.json(
-        { error: "The requested user was not found or is not registered as a senior buddy." },
+        { error: "This person is not available to receive connection requests." },
         { status: 404 }
       );
     }
 
-    // Check existing match record for this pair
-    const existingMatch = await BuddyMatch.findOne({
-      studentId: userId,
-      buddyId,
-    });
+    const pairKey = generatePairKey(userId, recipientId);
+
+    // Check existing match record for this pair using canonical pairKey
+    const existingMatch = await BuddyMatch.findOne({ pairKey });
 
     if (existingMatch) {
       if (existingMatch.status === "pending") {
+        if (existingMatch.requesterId.toString() === recipientId.toString()) {
+          // The other person already sent a pending request to the sender
+          return NextResponse.json(
+            {
+              error: `${recipientUser.name} has already sent you a connection request. Please accept their incoming request in My Connections.`,
+            },
+            { status: 409 }
+          );
+        }
         return NextResponse.json(
-          { error: "A connection request is already pending with this senior." },
+          { error: "A connection request is already pending with this person." },
           { status: 400 }
         );
       }
       if (existingMatch.status === "accepted") {
         return NextResponse.json(
-          { error: "You are already connected with this senior." },
+          { error: "You are already connected with this person." },
           { status: 400 }
         );
       }
     }
 
-    // Check student pending request limit
+    // Check sender pending request limit
     const pendingCount = await BuddyMatch.countDocuments({
-      studentId: userId,
+      requesterId: userId,
       status: "pending",
     });
 
-    if (pendingCount >= MAX_PENDING_REQUESTS_PER_STUDENT) {
+    if (pendingCount >= MAX_PENDING_REQUESTS_PER_USER) {
       return NextResponse.json(
         {
-          error: `You already have ${MAX_PENDING_REQUESTS_PER_STUDENT} pending requests. Please wait for a response before requesting more buddies.`,
+          error: `You already have ${MAX_PENDING_REQUESTS_PER_USER} pending requests. Please wait for responses before sending more.`,
         },
         { status: 400 }
       );
     }
 
-    // Check senior buddy capacity
-    const acceptedCount = await BuddyMatch.countDocuments({
-      buddyId,
-      status: "accepted",
-    });
+    // Capacity limit (5 accepted connections) applies ONLY when recipient is a senior
+    if (recipientUser.isSenior) {
+      const activeSeniorCount = await BuddyMatch.countDocuments({
+        $or: [{ requesterId: recipientId }, { recipientId }],
+        status: "accepted",
+      });
 
-    if (acceptedCount >= MAX_ACTIVE_STUDENTS_PER_BUDDY) {
-      return NextResponse.json(
-        {
-          error: "This senior buddy has reached their maximum number of active student connections.",
-        },
-        { status: 400 }
-      );
+      if (activeSeniorCount >= MAX_ACTIVE_STUDENTS_PER_BUDDY) {
+        return NextResponse.json(
+          {
+            error: "This senior buddy has reached their maximum number of active student connections.",
+          },
+          { status: 400 }
+        );
+      }
     }
 
     let matchRecord;
     if (existingMatch) {
-      // Reopen previously declined or cancelled request
+      // Reopen previously declined or cancelled record as pending
+      existingMatch.requesterId = userId;
+      existingMatch.recipientId = recipientId;
+      existingMatch.pairKey = pairKey;
       existingMatch.status = "pending";
-      existingMatch.message = message.trim();
+      existingMatch.message = message;
       existingMatch.respondedAt = null;
       matchRecord = await existingMatch.save();
     } else {
       matchRecord = await BuddyMatch.create({
-        studentId: userId,
-        buddyId,
-        message: message.trim(),
+        requesterId: userId,
+        recipientId,
+        pairKey,
+        message,
         status: "pending",
       });
+    }
+
+    // Trigger notification asynchronously
+    try {
+      await notifyBuddyRequest(matchRecord);
+    } catch (notifErr) {
+      console.error("notifyBuddyRequest failed:", notifErr);
     }
 
     return NextResponse.json(

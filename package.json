@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "seed": "node --env-file=.env.local scripts/seed.js",
+    "migrate:buddy": "node --env-file=.env.local scripts/migrate-buddy-fields.js",
     "test:personalization": "node --env-file=.env.local scripts/test-personalization.js"
   },
   "dependencies": {

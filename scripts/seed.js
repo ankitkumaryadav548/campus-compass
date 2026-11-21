@@ -15,6 +15,7 @@ const bcrypt   = require("bcryptjs");
 
 // ── Campus constants – single source of truth from lib/campus.js ───────────
 const { CAMPUS_NAME, CAMPUS_LAT, CAMPUS_LNG } = require("../lib/campus");
+const { SquareDashedKanban } = require("lucide-react");
 
 // ── MongoDB connection ─────────────────────────────────────────────────────
 const MONGODB_URI = process.env.MONGODB_URI;
@@ -40,6 +41,7 @@ const UserSchema = new mongoose.Schema(
     visaType:       { type: String, default: "" },
     arrivalDate:    Date,
     isSenior:       { type: Boolean, default: false },
+    openToConnect:  { type: Boolean, default: true },
     bio:            { type: String, default: "" },
     onboardingDone: { type: Boolean, default: false },
     isSample:       { type: Boolean, default: false },
@@ -128,15 +130,16 @@ EventSchema.index({ region: 1 });
 // ── BuddyMatch ──
 const BuddyMatchSchema = new mongoose.Schema(
   {
-    studentId:   { type: mongoose.Schema.Types.ObjectId, ref: "User" },
-    buddyId:     { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    requesterId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    recipientId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    pairKey:     { type: String, required: true },
     status:      { type: String, enum: ["pending", "accepted", "declined", "cancelled"], default: "pending" },
     message:     { type: String, default: "" },
     respondedAt: Date,
   },
   { timestamps: true }
 );
-BuddyMatchSchema.index({ studentId: 1, buddyId: 1 }, { unique: true });
+BuddyMatchSchema.index({ pairKey: 1 }, { unique: true });
 
 // ── Message ──
 const MessageSchema = new mongoose.Schema(
@@ -173,6 +176,21 @@ const GuideProgressSchema = new mongoose.Schema(
 );
 GuideProgressSchema.index({ userId: 1, guideId: 1 }, { unique: true });
 
+// ── Notification ──
+const NotificationSchema = new mongoose.Schema(
+  {
+    recipientId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    actorId:     { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    type:        { type: String, enum: ["buddy_request", "request_accepted", "request_declined", "new_message"], required: true },
+    matchId:     { type: mongoose.Schema.Types.ObjectId, ref: "BuddyMatch", default: null },
+    count:       { type: Number, default: 1 },
+    readAt:      { type: Date, default: null },
+    isSample:    { type: Boolean, default: false },
+  },
+  { timestamps: true }
+);
+NotificationSchema.index({ recipientId: 1, readAt: 1, createdAt: -1 });
+
 // ── Register models ────────────────────────────────────────────────────────
 const User          = mongoose.models.User          || mongoose.model("User",          UserSchema);
 const Guide         = mongoose.models.Guide         || mongoose.model("Guide",         GuideSchema);
@@ -183,6 +201,7 @@ const BuddyMatch    = mongoose.models.BuddyMatch    || mongoose.model("BuddyMatc
 const Message       = mongoose.models.Message       || mongoose.model("Message",       MessageSchema);
 const UserChecklist = mongoose.models.UserChecklist || mongoose.model("UserChecklist", UserChecklistSchema);
 const GuideProgress = mongoose.models.GuideProgress || mongoose.model("GuideProgress", GuideProgressSchema);
+const Notification  = mongoose.models.Notification  || mongoose.model("Notification",  NotificationSchema);
 
 // ── Helper ─────────────────────────────────────────────────────────────────
 /** Returns a date N days from now */
@@ -207,16 +226,33 @@ async function seed() {
 
   // ── 1. WIPE ONLY SAMPLE DATA (idempotent) ─────────────────────────────
   console.log("🗑   Removing previous sample data…");
-  const [dU, dG, dC, dP, dE, dBM, dM, dUC, dGP] = await Promise.all([
+  const existingSampleUsers = await User.find({ isSample: true }).select("_id").lean();
+  const sampleUserIds = existingSampleUsers.map((u) => u._id);
+
+  const [dU, dG, dC, dP, dE, dBM, dM, dUC, dGP, dN] = await Promise.all([
     User.deleteMany({ isSample: true }),
     Guide.deleteMany({ isSample: true }),
     ChecklistItem.deleteMany({ isSample: true }),
     Place.deleteMany({ isSample: true }),
     Event.deleteMany({ isSample: true }),
-    BuddyMatch.deleteMany({}),
-    Message.deleteMany({}),
-    UserChecklist.deleteMany({}),
-    GuideProgress.deleteMany({}),
+    BuddyMatch.deleteMany({
+      $or: [
+        { requesterId: { $in: sampleUserIds } },
+        { recipientId: { $in: sampleUserIds } },
+        { studentId: { $in: sampleUserIds } },
+        { buddyId: { $in: sampleUserIds } },
+      ],
+    }),
+    Message.deleteMany({
+      senderId: { $in: sampleUserIds },
+    }),
+    UserChecklist.deleteMany({
+      userId: { $in: sampleUserIds },
+    }),
+    GuideProgress.deleteMany({
+      userId: { $in: sampleUserIds },
+    }),
+    Notification.deleteMany({ isSample: true }),
   ]);
   console.log(`    Deleted: Users(${dU.deletedCount}) Guides(${dG.deletedCount}) ChecklistItems(${dC.deletedCount}) Places(${dP.deletedCount}) Events(${dE.deletedCount})\n`);
 
@@ -743,14 +779,51 @@ async function seed() {
   const linh   = findUser("linh.pham@sample.test");
   const amina  = findUser("amina.yusuf@sample.test");
   const david  = findUser("david.ssekandi@sample.test");
+  const grace  = findUser("grace.namukasa@sample.test");
+  const samuel = findUser("samuel.mwangi@sample.test");
   const minhB  = findUser("minh.nguyen@sample.test");
   const chidi  = findUser("chidi.okonkwo@sample.test");
 
+  function generatePairKey(idA, idB) {
+    return [idA.toString(), idB.toString()].sort().join(":");
+  }
+
   const buddyMatchesData = [
-    { studentId: moses._id,  buddyId: david._id,  status: "accepted", message: "[SAMPLE] Hi David, I just arrived from Uganda!" },
-    { studentId: moses._id,  buddyId: findUser("samuel.mwangi@sample.test")._id, status: "pending", message: "[SAMPLE] Hi Samuel, I heard you're from East Africa – looking forward to connecting." },
-    { studentId: linh._id,   buddyId: minhB._id,  status: "accepted", message: "[SAMPLE] Xin chào! Tôi mới đến." },
-    { studentId: amina._id,  buddyId: chidi._id,  status: "accepted", message: "[SAMPLE] Hi Chidi, fellow Nigerian here!" },
+    {
+      requesterId: moses._id,
+      recipientId: david._id,
+      pairKey: generatePairKey(moses._id, david._id),
+      status: "accepted",
+      message: "[SAMPLE] Hi David, I just arrived from Uganda!",
+    },
+    {
+      requesterId: moses._id,
+      recipientId: findUser("samuel.mwangi@sample.test")._id,
+      pairKey: generatePairKey(moses._id, findUser("samuel.mwangi@sample.test")._id),
+      status: "pending",
+      message: "[SAMPLE] Hi Samuel, I heard you're from East Africa – looking forward to connecting.",
+    },
+    {
+      requesterId: linh._id,
+      recipientId: minhB._id,
+      pairKey: generatePairKey(linh._id, minhB._id),
+      status: "accepted",
+      message: "[SAMPLE] Xin chào! Tôi mới đến.",
+    },
+    {
+      requesterId: amina._id,
+      recipientId: chidi._id,
+      pairKey: generatePairKey(amina._id, chidi._id),
+      status: "accepted",
+      message: "[SAMPLE] Hi Chidi, fellow Nigerian here!",
+    },
+    {
+      requesterId: linh._id,
+      recipientId: moses._id,
+      pairKey: generatePairKey(linh._id, moses._id),
+      status: "pending",
+      message: "[SAMPLE] Hi Moses! I saw we are both new students here, would love to connect!",
+    },
   ];
 
   const buddyMatches = await BuddyMatch.insertMany(buddyMatchesData);
@@ -759,7 +832,7 @@ async function seed() {
   // ── 9. SAMPLE MESSAGES ────────────────────────────────────────────────
   console.log("💬  Inserting sample messages…");
   const mosesDavidMatch = buddyMatches.find(
-    (bm) => bm.studentId.toString() === moses._id.toString() && bm.buddyId.toString() === david._id.toString()
+    (bm) => bm.requesterId.toString() === moses._id.toString() && bm.recipientId.toString() === david._id.toString()
   );
 
   const sampleMessagesData = [
@@ -789,6 +862,62 @@ async function seed() {
   const messages = await Message.insertMany(sampleMessagesData);
   console.log(`    ✓  ${messages.length} messages inserted\n`);
 
+  // ── 10. SAMPLE NOTIFICATIONS ──────────────────────────────────────────
+  console.log("🔔  Inserting sample notifications…");
+  const sampleNotificationsData = [
+    // 3 notifications for Moses
+    {
+      recipientId: moses._id,
+      actorId:     linh._id,
+      type:        "buddy_request",
+      matchId:     null,
+      count:       1,
+      readAt:      null,
+      isSample:    true,
+    },
+    {
+      recipientId: moses._id,
+      actorId:     david._id,
+      type:        "request_accepted",
+      matchId:     mosesDavidMatch._id,
+      count:       1,
+      readAt:      daysAgo(2),
+      isSample:    true,
+    },
+    {
+      recipientId: moses._id,
+      actorId:     david._id,
+      type:        "new_message",
+      matchId:     mosesDavidMatch._id,
+      count:       2,
+      readAt:      null,
+      isSample:    true,
+    },
+
+    // 2 notifications for David
+    {
+      recipientId: david._id,
+      actorId:     samuel._id,
+      type:        "buddy_request",
+      matchId:     null,
+      count:       1,
+      readAt:      null,
+      isSample:    true,
+    },
+    {
+      recipientId: david._id,
+      actorId:     moses._id,
+      type:        "request_accepted",
+      matchId:     mosesDavidMatch._id,
+      count:       1,
+      readAt:      daysAgo(1),
+      isSample:    true,
+    },
+  ];
+
+  const notifications = await Notification.insertMany(sampleNotificationsData);
+  console.log(`    ✓  ${notifications.length} notifications inserted\n`);
+
   // ── SUMMARY ───────────────────────────────────────────────────────────
   console.log("─".repeat(55));
   console.log("🎉  Seed complete!\n");
@@ -799,6 +928,8 @@ async function seed() {
   console.log(`     Places        : ${places.length}`);
   console.log(`     Events        : ${events.length}`);
   console.log(`     BuddyMatches  : ${buddyMatches.length}`);
+  console.log(`     Messages      : ${messages.length}`);
+  console.log(`     Notifications : ${notifications.length}`);
   console.log("\n   Sample user login (all):");
   console.log("     Email   : moses.kato@sample.test  (or any @sample.test address)");
   console.log(`     Password: ${SAMPLE_PASSWORD}`);
@@ -813,3 +944,6 @@ seed().catch((err) => {
   console.error(err);
   process.exit(1);
 });
+
+
+

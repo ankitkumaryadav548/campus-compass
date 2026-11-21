@@ -1,7 +1,7 @@
 "use client";
 // components/modules/community/MyConnections.jsx
 // Displays incoming and outgoing connection requests, status indicators,
-// accept/decline action controls for seniors, and links to 1-to-1 chats.
+// accept/decline action controls for recipients, cancel for requesters, and links to 1-to-1 chats.
 
 import { useState } from "react";
 import Link from "next/link";
@@ -11,12 +11,9 @@ import {
   X,
   Clock,
   CheckCircle2,
-  XCircle,
   Globe,
-  Loader2,
   Users,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
@@ -24,7 +21,7 @@ import EmptyState from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
 
 function getInitials(name) {
-  if (!name) return "C";
+  if (!name) return "CC";
   const parts = name.trim().split(" ");
   if (parts.length >= 2) {
     return (parts[0][0] + parts[1][0]).toUpperCase();
@@ -34,18 +31,17 @@ function getInitials(name) {
 
 export default function MyConnections({
   matches: initialMatches,
-  isSenior,
   onConnectionsChanged,
 }) {
   const toast = useToast();
   const [matches, setMatches] = useState(initialMatches);
   const [actingId, setActingId] = useState(null);
 
-  const pendingIncoming = matches.filter(
-    (m) => m.status === "pending" && m.myRole === "buddy"
+  const incomingRequests = matches.filter(
+    (m) => m.status === "pending" && (m.direction === "incoming" || !m.isRequester)
   );
-  const pendingOutgoing = matches.filter(
-    (m) => m.status === "pending" && m.myRole === "student"
+  const sentRequests = matches.filter(
+    (m) => m.status === "pending" && (m.direction === "sent" || m.isRequester)
   );
   const acceptedMatches = matches.filter((m) => m.status === "accepted");
   const pastMatches = matches.filter(
@@ -63,15 +59,19 @@ export default function MyConnections({
         body: JSON.stringify({ action }),
       });
 
+      const data = await res.json();
       if (!res.ok) {
-        const data = await res.json();
         throw new Error(data.error || "Could not update connection request.");
       }
 
-      const data = await res.json();
       toast({
-        message: action === "accept" ? "Connection accepted! You can now chat." : "Request updated.",
-        type: "success",
+        message:
+          action === "accept"
+            ? "Connection accepted! You can now chat."
+            : action === "cancel"
+            ? "Request cancelled."
+            : "Request declined.",
+        type: action === "accept" ? "success" : "info",
       });
 
       setMatches((prev) =>
@@ -98,34 +98,34 @@ export default function MyConnections({
       <EmptyState
         icon={<Users size={32} />}
         title="No connections yet"
-        description={
-          isSenior
-            ? "When new international students request your mentorship, their requests will appear here."
-            : "Browse the buddy suggestions tab to find and connect with experienced seniors."
-        }
+        description="Browse the People tab to find peers and senior buddies to connect with."
       />
     );
   }
 
   return (
     <div className="space-y-6">
-      {/* 1. Pending Incoming Requests (For Seniors) */}
-      {isSenior && pendingIncoming.length > 0 && (
+      {/* 1. Pending Incoming Requests */}
+      {incomingRequests.length > 0 && (
         <div className="space-y-3">
           <div className="flex items-center gap-2">
             <Clock size={16} className="text-amber-500" aria-hidden="true" />
             <h2 className="text-sm font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-              Pending Mentorship Requests ({pendingIncoming.length})
+              Incoming Requests ({incomingRequests.length})
             </h2>
           </div>
 
           <div className="space-y-3">
-            {pendingIncoming.map((m) => {
-              const partnerName = m.partner?.name?.replace(/^\[SAMPLE\]\s*/i, "").replace(" (Sample)", "") || "Student";
+            {incomingRequests.map((m) => {
+              const partnerName =
+                m.partner?.name?.replace(/^\[SAMPLE\]\s*/i, "").replace(" (Sample)", "") || "Student";
               const isActing = actingId === m._id;
 
               return (
-                <Card key={m._id} className="p-4 border-amber-200 dark:border-amber-800/60 bg-amber-50/20 dark:bg-amber-950/10">
+                <Card
+                  key={m._id}
+                  className="p-4 border-amber-200 dark:border-amber-800/60 bg-amber-50/20 dark:bg-amber-950/10"
+                >
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div className="flex items-start gap-3 min-w-0">
                       <div className="w-10 h-10 rounded-full bg-gradient-primary flex items-center justify-center text-white text-xs font-bold shrink-0">
@@ -136,8 +136,13 @@ export default function MyConnections({
                           <h3 className="text-sm font-bold text-slate-900 dark:text-white">
                             {partnerName}
                           </h3>
-                          {m.partner?.country && (
+                          {m.partner?.isSenior && (
                             <Badge variant="info" className="text-[10px]">
+                              Senior
+                            </Badge>
+                          )}
+                          {m.partner?.country && (
+                            <Badge variant="neutral" className="text-[10px]">
                               {m.partner.country}
                             </Badge>
                           )}
@@ -179,19 +184,20 @@ export default function MyConnections({
         </div>
       )}
 
-      {/* 2. Pending Outgoing Requests (For Students) */}
-      {!isSenior && pendingOutgoing.length > 0 && (
+      {/* 2. Pending Sent Requests */}
+      {sentRequests.length > 0 && (
         <div className="space-y-3">
           <div className="flex items-center gap-2">
             <Clock size={16} className="text-amber-500" aria-hidden="true" />
             <h2 className="text-sm font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-              Pending Requests ({pendingOutgoing.length})
+              Sent Requests ({sentRequests.length})
             </h2>
           </div>
 
           <div className="space-y-3">
-            {pendingOutgoing.map((m) => {
-              const partnerName = m.partner?.name?.replace(/^\[SAMPLE\]\s*/i, "").replace(" (Sample)", "") || "Senior Buddy";
+            {sentRequests.map((m) => {
+              const partnerName =
+                m.partner?.name?.replace(/^\[SAMPLE\]\s*/i, "").replace(" (Sample)", "") || "Connection";
               const isActing = actingId === m._id;
 
               return (
@@ -206,6 +212,11 @@ export default function MyConnections({
                           <h3 className="text-sm font-bold text-slate-900 dark:text-white">
                             {partnerName}
                           </h3>
+                          {m.partner?.isSenior && (
+                            <Badge variant="info" className="text-[10px]">
+                              Senior
+                            </Badge>
+                          )}
                           {m.partner?.country && (
                             <Badge variant="neutral" className="text-[10px]">
                               {m.partner.country}
@@ -230,7 +241,7 @@ export default function MyConnections({
                         onClick={() => handleRespond(m._id, "cancel")}
                         className="text-xs text-slate-400 hover:text-danger-600 dark:hover:text-danger-400 underline min-h-[36px] flex items-center"
                       >
-                        {isActing ? "Cancelling..." : "Cancel"}
+                        {isActing ? "Cancelling…" : "Cancel"}
                       </button>
                     </div>
                   </div>
@@ -252,12 +263,13 @@ export default function MyConnections({
 
         {acceptedMatches.length === 0 ? (
           <p className="text-xs text-slate-400 dark:text-slate-500 italic py-2">
-            No accepted connections yet.
+            No active connections yet.
           </p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {acceptedMatches.map((m) => {
-              const partnerName = m.partner?.name?.replace(/^\[SAMPLE\]\s*/i, "").replace(" (Sample)", "") || "Connection";
+              const partnerName =
+                m.partner?.name?.replace(/^\[SAMPLE\]\s*/i, "").replace(" (Sample)", "") || "Connection";
               const hasUnread = m.unreadCount > 0;
 
               return (
@@ -275,7 +287,7 @@ export default function MyConnections({
                           <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
                             <Globe size={10} />
                             {m.partner?.country}
-                            {m.partner?.isSenior && " (Senior Buddy)"}
+                            {m.partner?.isSenior && " (Senior)"}
                           </p>
                         </div>
                       </div>

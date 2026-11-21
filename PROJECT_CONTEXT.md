@@ -58,7 +58,8 @@ LLM_API_KEY
 | 4 | **Checklist** | Arrival documentation tracker with deadlines and progress bar |
 | 5 | **Guides** | SIM and Bank step-by-step guides with required documents, provider list, tips, and per-user step progress |
 | 6 | **Food Finder** | Map and list, filter by cuisine, diet (halal, vegetarian, etc.), country tags, student reviews |
-| 7 | **Community** | Buddy matching (seniors/peers), events, simple group chat or request system |
+| 7 | **Community** | Connection matching (seniors and peers), campus events with RSVP, 1-to-1 chat |
+| 7.5 | **Notifications** | In-app notification bell, badge, dropdown, full history page, triggered by buddy requests and chat |
 | 8 | **Language Help** | Common phrases and campus glossary |
 | 9 | **Chatbot** | Answers using the student's profile + matching guides from DB |
 | 10 | **Admin Panel** | Role-protected CRUD for guides, places, events, checklist items |
@@ -84,10 +85,10 @@ region: { $in: [user.country, user.regionGroup, "ALL"] }
 Show the most specific match first. If the country has no data, the app must
 still work and show regionGroup / ALL content with a friendly note.
 
-**Buddy matching priority:**
+**Connection / People matching priority (seniors and peers):**
 1. Same country
 2. Same language or regionGroup
-3. Any available international senior/volunteer
+3. Any available international peer/senior open to connect
 
 **Reusable helper:** Create ONE file `lib/personalization.js` used by every module.
 
@@ -99,7 +100,7 @@ still work and show regionGroup / ALL content with a friendly note.
 ```
 name, email (unique), password (hashed), role (student|buddy|admin),
 country, regionGroup, languages[], diet, university, visaType, arrivalDate,
-isSenior (Boolean), bio, onboardingDone (Boolean), createdAt
+isSenior (Boolean), openToConnect (Boolean, default true), bio, onboardingDone (Boolean), createdAt
 ```
 
 ### Guide
@@ -134,8 +135,8 @@ countryTags[], address, location{lat,lng}, rating, reviews[]
 
 ### BuddyMatch
 ```
-studentId, buddyId, status (pending|accepted|declined|cancelled), message, respondedAt
-(unique compound index on studentId + buddyId)
+requesterId, recipientId, pairKey, status (pending|accepted|declined|cancelled), message, respondedAt
+(unique index on pairKey)
 ```
 
 ### Message
@@ -147,6 +148,13 @@ matchId, senderId, text (1 to 500 chars), createdAt, readAt
 ### Event
 ```
 title, description, date, region[], location, attendees[]
+```
+
+### Notification
+```
+recipientId, actorId, type (buddy_request|request_accepted|request_declined|new_message),
+matchId, count, readAt, isSample, createdAt, updatedAt
+(compound index on recipientId + readAt + createdAt desc; TTL index on createdAt 60 days)
 ```
 
 > **Note:** Use `mongoose.models.X || mongoose.model(...)` to avoid model recompile errors.
@@ -171,6 +179,7 @@ app/
   guides/[category]/
   food/
   community/
+  notifications/
   language/
   chat/
   admin/
@@ -182,16 +191,20 @@ app/
     places/
     buddies/
     events/
+    notifications/
     chat/
     admin/
 components/
   ui/
   layout/
   modules/
+    notifications/
 lib/
   mongodb.js
   auth.js
   personalization.js
+  notifications.js
+  notificationText.js
   utils.js
 models/
 scripts/

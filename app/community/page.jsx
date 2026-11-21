@@ -1,11 +1,12 @@
 // app/community/page.jsx
 // Community & Mentorship module:
-// Senior buddy matching, connection management, 1-to-1 chat, and campus mixer events.
+// Connection matching between peers and senior buddies, connection management, 1-to-1 chat, and campus mixer events.
 
 import { requireUser } from "@/lib/session";
 import { connectDB } from "@/lib/mongodb";
+import User from "@/models/User";
 import {
-  getBuddySuggestions,
+  getPeopleSuggestions,
   getMyMatches,
   getUpcomingEvents,
 } from "@/lib/community";
@@ -15,21 +16,42 @@ import CommunityClient from "@/components/modules/community/CommunityClient";
 import { Users } from "lucide-react";
 
 export const metadata = {
-  title: "Community & Senior Buddies – Campus Compass",
+  title: "Community & Connections – Campus Compass",
 };
 
-export default async function CommunityPage() {
-  const user = await requireUser("/community");
+export default async function CommunityPage({ searchParams }) {
+  const sessionUser = await requireUser("/community");
+  const resolvedSearchParams = (await searchParams) || {};
+
+  const kind = resolvedSearchParams.kind || "all";
+  const country = resolvedSearchParams.country || "";
+  const search = resolvedSearchParams.search || "";
 
   await connectDB();
 
-  const [suggestions, matches, events] = await Promise.all([
-    getBuddySuggestions(user),
-    getMyMatches(user),
-    getUpcomingEvents(user),
+  const dbUser = await User.findById(sessionUser.id)
+    .select("name country regionGroup languages bio isSenior openToConnect role onboardingDone")
+    .lean();
+
+  const currentUser = {
+    _id: sessionUser.id,
+    id: sessionUser.id,
+    name: dbUser?.name || sessionUser.name,
+    country: dbUser?.country || sessionUser.country || "",
+    regionGroup: dbUser?.regionGroup || sessionUser.regionGroup || "",
+    languages: dbUser?.languages || [],
+    bio: dbUser?.bio || "",
+    isSenior: Boolean(dbUser?.isSenior),
+    openToConnect: dbUser?.openToConnect !== false,
+  };
+
+  const [peopleData, matches, events] = await Promise.all([
+    getPeopleSuggestions(currentUser, { kind, country, search }),
+    getMyMatches(currentUser),
+    getUpcomingEvents(currentUser),
   ]);
 
-  const noContentBannerText = noContentNote(user);
+  const noContentBannerText = noContentNote(currentUser);
 
   return (
     <AppShell>
@@ -42,16 +64,15 @@ export default async function CommunityPage() {
             </h1>
           </div>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            Connect with senior mentors from your home country, manage your peer connections, and attend campus cultural events.
+            Connect with peers and senior mentors, manage your connection requests, and attend campus mixer events.
           </p>
         </div>
 
         <CommunityClient
-          suggestions={suggestions}
+          peopleData={peopleData}
           matches={matches}
           events={events}
-          userCountry={user.country}
-          isSenior={Boolean(user.isSenior)}
+          currentUser={currentUser}
           noContentBannerText={noContentBannerText}
         />
       </div>

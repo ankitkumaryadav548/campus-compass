@@ -24,6 +24,7 @@ const UserSchema = new Schema(
 
     // Buddy / senior fields
     isSenior:        { type: Boolean, default: false },
+    openToConnect:   { type: Boolean, default: true },
     bio:             { type: String, trim: true, default: "" },
 
     // Onboarding state

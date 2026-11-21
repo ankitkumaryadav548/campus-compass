@@ -5,6 +5,7 @@ import { authOptions } from "@/lib/auth";
 import { connectDB } from "@/lib/mongodb";
 import BuddyMatch from "@/models/BuddyMatch";
 import Message from "@/models/Message";
+import { notifyNewMessage, markMatchMessagesRead } from "@/lib/notifications";
 
 // Rate limiting: max 30 messages per 5 minutes per user
 const userMessageTimestamps = new Map();
@@ -54,8 +55,9 @@ export async function GET(request, { params }) {
       );
     }
 
-    const isParticipant =
-      match.studentId.toString() === userId || match.buddyId.toString() === userId;
+    const requesterId = (match.requesterId || match.studentId)?.toString();
+    const recipientId = (match.recipientId || match.buddyId)?.toString();
+    const isParticipant = requesterId === userId || recipientId === userId;
     if (!isParticipant) {
       return NextResponse.json(
         { error: "You are not authorized to access this conversation." },
@@ -95,6 +97,12 @@ export async function GET(request, { params }) {
         { _id: { $in: unreadMessageIds } },
         { $set: { readAt: new Date() } }
       );
+    }
+
+    try {
+      await markMatchMessagesRead(userId, matchId);
+    } catch (notifErr) {
+      console.error("markMatchMessagesRead failed:", notifErr);
     }
 
     return NextResponse.json({
@@ -180,8 +188,9 @@ export async function POST(request, { params }) {
       );
     }
 
-    const isParticipant =
-      match.studentId.toString() === userId || match.buddyId.toString() === userId;
+    const requesterId = (match.requesterId || match.studentId)?.toString();
+    const recipientId = (match.recipientId || match.buddyId)?.toString();
+    const isParticipant = requesterId === userId || recipientId === userId;
     if (!isParticipant) {
       return NextResponse.json(
         { error: "You are not authorized to post to this conversation." },
@@ -202,6 +211,12 @@ export async function POST(request, { params }) {
       text: trimmedText,
       createdAt: new Date(),
     });
+
+    try {
+      await notifyNewMessage(match, userId);
+    } catch (notifErr) {
+      console.error("notifyNewMessage failed:", notifErr);
+    }
 
     return NextResponse.json(
       {

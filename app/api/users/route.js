@@ -39,7 +39,24 @@ export async function PATCH(req) {
     }
 
     const body = await req.json();
-    const { country, languages, diet, university, visaType, arrivalDate, bio } = body;
+
+    // Support standalone update of openToConnect toggle
+    if (typeof body.openToConnect === "boolean" && Object.keys(body).length === 1) {
+      await connectDB();
+      const updatedUser = await User.findByIdAndUpdate(
+        session.user.id,
+        { $set: { openToConnect: body.openToConnect } },
+        { new: true }
+      ).select("-password").lean();
+
+      if (!updatedUser) {
+        return NextResponse.json({ error: "User not found" }, { status: 404 });
+      }
+
+      return NextResponse.json({ ok: true, user: updatedUser });
+    }
+
+    const { country, languages, diet, university, visaType, arrivalDate, bio, openToConnect } = body;
 
     // Validate country
     if (!country || typeof country !== "string") {
@@ -116,6 +133,10 @@ export async function PATCH(req) {
       bio: typeof bio === "string" ? bio.trim().slice(0, 300) : "",
       onboardingDone: true
     };
+
+    if (typeof openToConnect === "boolean") {
+      updateData.openToConnect = openToConnect;
+    }
 
     await connectDB();
     const updatedUser = await User.findByIdAndUpdate(

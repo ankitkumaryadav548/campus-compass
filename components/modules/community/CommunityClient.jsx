@@ -1,22 +1,22 @@
 "use client";
 // components/modules/community/CommunityClient.jsx
-// Client orchestrator managing tabs (Buddies / My Connections / Events),
-// URL synchronization, and cross-tab connection status refreshing.
+// Client orchestrator managing tabs (People / My Connections / Campus Events),
+// URL synchronization (?tab=people|matches|events, with ?tab=buddies alias),
+// and cross-tab connection status refreshing.
 
 import { useState, useEffect, useTransition } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { Users, UserCheck, Calendar } from "lucide-react";
 import { cn } from "@/lib/utils";
-import BuddySuggestions from "./BuddySuggestions";
+import PeopleSection from "./PeopleSection";
 import MyConnections from "./MyConnections";
 import EventsSection from "./EventsSection";
 
 export default function CommunityClient({
-  suggestions,
+  peopleData,
   matches,
   events,
-  userCountry,
-  isSenior,
+  currentUser,
   noContentBannerText,
 }) {
   const router = useRouter();
@@ -24,17 +24,26 @@ export default function CommunityClient({
   const searchParams = useSearchParams();
   const [, startTransition] = useTransition();
 
-  const tabParam = searchParams.get("tab");
-  const defaultTab = isSenior ? "matches" : "buddies";
+  const rawTab = searchParams.get("tab");
+  const tabParam = rawTab === "buddies" ? "people" : rawTab;
+
+  const hasIncomingPending = matches.some(
+    (m) => m.status === "pending" && (m.direction === "incoming" || !m.isRequester)
+  );
+
+  const defaultTab = hasIncomingPending ? "matches" : "people";
+
   const [activeTab, setActiveTab] = useState(
-    ["buddies", "matches", "events"].includes(tabParam) ? tabParam : defaultTab
+    ["people", "matches", "events"].includes(tabParam) ? tabParam : defaultTab
   );
 
   useEffect(() => {
-    if (tabParam && ["buddies", "matches", "events"].includes(tabParam)) {
-      setActiveTab(tabParam);
+    const currentRaw = searchParams.get("tab");
+    const resolved = currentRaw === "buddies" ? "people" : currentRaw;
+    if (resolved && ["people", "matches", "events"].includes(resolved)) {
+      setActiveTab(resolved);
     }
-  }, [tabParam]);
+  }, [searchParams]);
 
   const handleTabChange = (tabId) => {
     setActiveTab(tabId);
@@ -52,8 +61,10 @@ export default function CommunityClient({
   };
 
   const pendingIncomingCount = matches.filter(
-    (m) => m.status === "pending" && m.myRole === "buddy"
+    (m) => m.status === "pending" && (m.direction === "incoming" || !m.isRequester)
   ).length;
+
+  const peopleCount = peopleData?.totalCount ?? peopleData?.people?.length ?? 0;
 
   return (
     <div className="space-y-6">
@@ -66,19 +77,19 @@ export default function CommunityClient({
         <button
           type="button"
           role="tab"
-          aria-selected={activeTab === "buddies"}
-          onClick={() => handleTabChange("buddies")}
+          aria-selected={activeTab === "people"}
+          onClick={() => handleTabChange("people")}
           className={cn(
             "flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all duration-150 min-h-[44px] shrink-0",
-            activeTab === "buddies"
+            activeTab === "people"
               ? "bg-primary-50 text-primary-700 dark:bg-primary-950/40 dark:text-primary-300 shadow-sm"
               : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
           )}
         >
           <Users size={16} aria-hidden="true" />
-          Senior Buddies
+          People
           <span className="text-xs px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold">
-            {suggestions.length}
+            {peopleCount}
           </span>
         </button>
 
@@ -124,10 +135,10 @@ export default function CommunityClient({
       </div>
 
       {/* Tab Panels */}
-      {activeTab === "buddies" && (
-        <BuddySuggestions
-          suggestions={suggestions}
-          userCountry={userCountry}
+      {activeTab === "people" && (
+        <PeopleSection
+          initialData={peopleData}
+          currentUser={currentUser}
           noContentBannerText={noContentBannerText}
           onConnectionsChanged={handleRefreshConnections}
         />
@@ -136,7 +147,6 @@ export default function CommunityClient({
       {activeTab === "matches" && (
         <MyConnections
           matches={matches}
-          isSenior={isSenior}
           onConnectionsChanged={handleRefreshConnections}
         />
       )}
@@ -144,7 +154,7 @@ export default function CommunityClient({
       {activeTab === "events" && (
         <EventsSection
           events={events}
-          userCountry={userCountry}
+          userCountry={currentUser?.country}
         />
       )}
     </div>

@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 import Button from "@/components/ui/Button";
 import Badge from "@/components/ui/Badge";
 import { useTheme } from "@/components/layout/ThemeProvider";
+import NotificationBell from "@/components/layout/NotificationBell";
 
 const NAV_LINKS = [
   { label: "Home",         href: "/" },
@@ -137,6 +138,9 @@ export default function Navbar() {
 
             {/* Right side: theme toggle + auth menu */}
             <div className="flex items-center gap-2.5">
+              {/* Notifications */}
+              {isAuthenticated && <NotificationBell />}
+
               {/* Theme toggle */}
               <button
                 onClick={toggleTheme}

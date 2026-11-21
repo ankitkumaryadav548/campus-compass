@@ -20,6 +20,8 @@ export default async function CommunityChatPage({ params }) {
   await connectDB();
 
   const match = await BuddyMatch.findById(matchId)
+    .populate("requesterId", "name country regionGroup languages bio isSenior")
+    .populate("recipientId", "name country regionGroup languages bio isSenior")
     .populate("studentId", "name country regionGroup languages bio isSenior")
     .populate("buddyId", "name country regionGroup languages bio isSenior")
     .lean();
@@ -29,10 +31,13 @@ export default async function CommunityChatPage({ params }) {
   }
 
   const userId = (user.id || user._id).toString();
-  const isStudent = match.studentId?._id?.toString() === userId;
-  const isBuddy = match.buddyId?._id?.toString() === userId;
+  const requester = match.requesterId || match.studentId;
+  const recipient = match.recipientId || match.buddyId;
 
-  if (!isStudent && !isBuddy) {
+  const isRequester = requester?._id?.toString() === userId;
+  const isRecipient = recipient?._id?.toString() === userId;
+
+  if (!isRequester && !isRecipient) {
     redirect("/community");
   }
 
@@ -40,7 +45,7 @@ export default async function CommunityChatPage({ params }) {
     redirect("/community?tab=matches");
   }
 
-  const partner = isStudent ? match.buddyId : match.studentId;
+  const partner = isRequester ? recipient : requester;
 
   // Fetch chronological messages
   const rawMessages = await Message.find({ matchId })

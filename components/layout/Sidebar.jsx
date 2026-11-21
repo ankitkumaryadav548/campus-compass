@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
@@ -49,7 +49,7 @@ function checkIsActive(pathname, href) {
   return pathname === href || pathname.startsWith(href + "/");
 }
 
-function NavItem({ href, icon: Icon, label, alert = false }) {
+function NavItem({ href, icon: Icon, label, alert = false, hasBadge = false }) {
   const pathname = usePathname();
   const active = checkIsActive(pathname, href);
 
@@ -58,7 +58,7 @@ function NavItem({ href, icon: Icon, label, alert = false }) {
       href={href}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150",
+        "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 relative",
         active
           ? alert
             ? "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
@@ -79,7 +79,13 @@ function NavItem({ href, icon: Icon, label, alert = false }) {
             : ""
         }
       />
-      <span>{label}</span>
+      <span className="flex-1">{label}</span>
+      {hasBadge && (
+        <span
+          className="w-2 h-2 rounded-full bg-danger-500 shrink-0"
+          aria-label="Unread notifications"
+        />
+      )}
     </Link>
   );
 }
@@ -88,6 +94,21 @@ export default function Sidebar() {
   const pathname = usePathname();
   const { data: session } = useSession();
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  // Listen for broadcasted notification unread count updates
+  useEffect(() => {
+    const handleUnreadUpdate = (e) => {
+      if (typeof e.detail?.count === "number") {
+        setUnreadCount(e.detail.count);
+      }
+    };
+
+    window.addEventListener("campus:unread-notifications", handleUnreadUpdate);
+    return () => {
+      window.removeEventListener("campus:unread-notifications", handleUnreadUpdate);
+    };
+  }, []);
 
   const user = session?.user;
   const isAdmin = user?.role === "admin";
@@ -123,7 +144,11 @@ export default function Sidebar() {
 
           <nav aria-label="Sidebar navigation" className="space-y-1">
             {allNavItems.map((item) => (
-              <NavItem key={item.href} {...item} />
+              <NavItem
+                key={item.href}
+                {...item}
+                hasBadge={item.label === "Community" && unreadCount > 0}
+              />
             ))}
           </nav>
         </div>
@@ -191,7 +216,7 @@ export default function Sidebar() {
           onClick={() => setMobileMoreOpen(true)}
           aria-label="More navigation options"
           className={cn(
-            "flex flex-col items-center gap-0.5 min-w-[48px] min-h-[44px] justify-center text-xs transition-colors",
+            "relative flex flex-col items-center gap-0.5 min-w-[48px] min-h-[44px] justify-center text-xs transition-colors",
             isMoreActive
               ? "text-primary-600 dark:text-primary-400 font-semibold"
               : "text-slate-500 dark:text-slate-400"
@@ -199,6 +224,12 @@ export default function Sidebar() {
         >
           <MoreHorizontal size={19} aria-hidden="true" />
           <span className="text-[10px]">More</span>
+          {unreadCount > 0 && (
+            <span
+              className="absolute top-2 right-2 w-2 h-2 rounded-full bg-danger-500"
+              aria-label="New notifications"
+            />
+          )}
         </button>
       </nav>
 
@@ -229,6 +260,7 @@ export default function Sidebar() {
             <div className="grid grid-cols-1 gap-2">
               {moreItems.map(({ href, icon: Icon, label, alert }) => {
                 const active = checkIsActive(pathname, href);
+                const hasDot = label === "Community" && unreadCount > 0;
                 return (
                   <Link
                     key={href}
@@ -244,7 +276,10 @@ export default function Sidebar() {
                     )}
                   >
                     <Icon size={18} />
-                    <span>{label}</span>
+                    <span className="flex-1">{label}</span>
+                    {hasDot && (
+                      <span className="w-2 h-2 rounded-full bg-danger-500 shrink-0" />
+                    )}
                   </Link>
                 );
               })}
