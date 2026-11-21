@@ -42,6 +42,7 @@ const UserSchema = new mongoose.Schema(
     arrivalDate:    Date,
     isSenior:       { type: Boolean, default: false },
     openToConnect:  { type: Boolean, default: true },
+    lastSeenAt:     { type: Date, default: null },
     bio:            { type: String, default: "" },
     onboardingDone: { type: Boolean, default: false },
     isSample:       { type: Boolean, default: false },
@@ -144,15 +145,25 @@ BuddyMatchSchema.index({ pairKey: 1 }, { unique: true });
 // ── Message ──
 const MessageSchema = new mongoose.Schema(
   {
-    matchId:   { type: mongoose.Schema.Types.ObjectId, ref: "BuddyMatch", required: true },
-    senderId:  { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-    text:      { type: String, required: true, trim: true },
-    createdAt: { type: Date, default: Date.now },
-    readAt:    { type: Date, default: null },
+    matchId:     { type: mongoose.Schema.Types.ObjectId, ref: "BuddyMatch", required: true },
+    senderId:    { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    recipientId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    clientId:    { type: String, default: null },
+    text:        { type: String, required: true, trim: true },
+    readAt:      { type: Date, default: null },
   },
-  { timestamps: false }
+  { timestamps: true }
 );
 MessageSchema.index({ matchId: 1, createdAt: 1 });
+MessageSchema.index({ matchId: 1, updatedAt: 1 });
+MessageSchema.index({ recipientId: 1, readAt: 1 });
+MessageSchema.index(
+  { senderId: 1, clientId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { clientId: { $type: "string" } },
+  }
+);
 
 // ── UserChecklist ──
 const UserChecklistSchema = new mongoose.Schema(
@@ -277,6 +288,7 @@ async function seed() {
       country: "Uganda", regionGroup: "East Africa",
       languages: ["English", "Luganda"],
       university: CAMPUS_NAME, diet: "halal",
+      lastSeenAt: new Date(Date.now() - 22 * 3600000), // yesterday evening
       bio: "[SAMPLE] 3rd-year BTech student from Kampala. Happy to help newcomers from Uganda!",
     },
     {
@@ -285,6 +297,7 @@ async function seed() {
       country: "Uganda", regionGroup: "East Africa",
       languages: ["English", "Luganda"],
       university: CAMPUS_NAME, diet: "vegetarian",
+      lastSeenAt: daysAgo(3), // 3 days ago
       bio: "[SAMPLE] Final year MBA, originally from Entebbe. Can help with FRRO and banking.",
     },
 
@@ -350,6 +363,7 @@ async function seed() {
       languages: ["Vietnamese", "English"],
       diet: "vegetarian", university: CAMPUS_NAME, visaType: "student",
       arrivalDate: daysAgo(7),
+      lastSeenAt: new Date(Date.now() - 10000), // 10 seconds ago -> online
     },
     {
       name: "Amina Yusuf (Sample)", email: "amina.yusuf@sample.test", password: hashedPw,
@@ -834,28 +848,55 @@ async function seed() {
   const mosesDavidMatch = buddyMatches.find(
     (bm) => bm.requesterId.toString() === moses._id.toString() && bm.recipientId.toString() === david._id.toString()
   );
+  const linhMosesMatch = buddyMatches.find(
+    (bm) => bm.requesterId.toString() === linh._id.toString() && bm.recipientId.toString() === moses._id.toString()
+  );
 
   const sampleMessagesData = [
+    // 1. Full date separator (> 6 days ago)
     {
-      matchId:   mosesDavidMatch._id,
-      senderId:  moses._id,
-      text:      "Hi David, thanks for accepting my connection request! I just arrived on campus yesterday.",
-      createdAt: daysAgo(2),
-      readAt:    daysAgo(2),
+      matchId:     mosesDavidMatch._id,
+      senderId:    moses._id,
+      recipientId: david._id,
+      text:        "Hi David, thanks for accepting my request! I will be flying to campus next week.",
+      createdAt:   daysAgo(10),
+      readAt:      daysAgo(10),
     },
+    // 2. Weekday separator (2 to 6 days ago)
     {
-      matchId:   mosesDavidMatch._id,
-      senderId:  david._id,
-      text:      "Welcome to campus Moses! Great to meet a fellow Ugandan here. Let me know if you need any help with your SIM or opening a bank account.",
-      createdAt: daysAgo(1),
-      readAt:    daysAgo(1),
+      matchId:     mosesDavidMatch._id,
+      senderId:    david._id,
+      recipientId: moses._id,
+      text:        "Safe travels Moses! Pack warm clothes for the evenings.",
+      createdAt:   daysAgo(4),
+      readAt:      daysAgo(4),
     },
+    // 3. Yesterday separator
     {
-      matchId:   mosesDavidMatch._id,
-      senderId:  moses._id,
-      text:      "Thank you! Which bank branch near Block A is best for international students?",
-      createdAt: new Date(Date.now() - 3600000), // 1 hour ago
-      readAt:    null,
+      matchId:     mosesDavidMatch._id,
+      senderId:    moses._id,
+      recipientId: david._id,
+      text:        "I arrived yesterday and checked into my hostel room.",
+      createdAt:   daysAgo(1),
+      readAt:      daysAgo(1),
+    },
+    // 4. Today (read message from partner)
+    {
+      matchId:     mosesDavidMatch._id,
+      senderId:    david._id,
+      recipientId: moses._id,
+      text:        "Welcome to campus Moses! Let me know if you need help with SIM or banking.",
+      createdAt:   new Date(Date.now() - 3 * 3600000),
+      readAt:      new Date(Date.now() - 2 * 3600000),
+    },
+    // 5. Today (sent message from Moses, unread by David -> two grey ticks)
+    {
+      matchId:     mosesDavidMatch._id,
+      senderId:    moses._id,
+      recipientId: david._id,
+      text:        "Thank you! Which bank branch near Block A is best for international students?",
+      createdAt:   new Date(Date.now() - 1800000), // 30 mins ago
+      readAt:      null,
     },
   ];
 

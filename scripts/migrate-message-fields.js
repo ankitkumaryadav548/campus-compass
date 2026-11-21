@@ -68,9 +68,19 @@ async function migrate() {
     await messagesCol.createIndex({ matchId: 1, createdAt: 1 });
     await messagesCol.createIndex({ matchId: 1, updatedAt: 1 });
     await messagesCol.createIndex({ recipientId: 1, readAt: 1 });
+    // Drop any failed legacy index if exists
+    try {
+      await messagesCol.dropIndex("senderId_1_clientId_1");
+    } catch {
+      // index might not exist
+    }
+
     await messagesCol.createIndex(
       { senderId: 1, clientId: 1 },
-      { unique: true, sparse: true }
+      {
+        unique: true,
+        partialFilterExpression: { clientId: { $type: "string" } },
+      }
     );
     console.log("Verified all Message collection indexes.");
   } catch (idxErr) {

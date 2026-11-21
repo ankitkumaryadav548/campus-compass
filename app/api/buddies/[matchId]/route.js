@@ -137,6 +137,7 @@ export async function PATCH(request, { params }) {
       return NextResponse.json({
         message: `Connection request ${match.status}.`,
         status: match.status,
+        matchId: match._id.toString(),
       });
     }
   } catch (err) {

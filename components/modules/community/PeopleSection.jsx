@@ -303,7 +303,11 @@ export default function PeopleSection({
       setPeople((prev) =>
         prev.map((p) =>
           p._id === personId
-            ? { ...p, requestStatus: action === "accept" ? "accepted" : "declined" }
+            ? {
+                ...p,
+                requestStatus: action === "accept" ? "accepted" : "declined",
+                matchId: data.matchId || p.matchId || matchId,
+              }
             : p
         )
       );

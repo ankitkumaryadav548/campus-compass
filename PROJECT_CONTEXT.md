@@ -100,7 +100,8 @@ still work and show regionGroup / ALL content with a friendly note.
 ```
 name, email (unique), password (hashed), role (student|buddy|admin),
 country, regionGroup, languages[], diet, university, visaType, arrivalDate,
-isSenior (Boolean), openToConnect (Boolean, default true), bio, onboardingDone (Boolean), createdAt
+isSenior (Boolean), openToConnect (Boolean, default true), bio, onboardingDone (Boolean),
+lastSeenAt (Date, default null), createdAt
 ```
 
 ### Guide
@@ -141,8 +142,10 @@ requesterId, recipientId, pairKey, status (pending|accepted|declined|cancelled),
 
 ### Message
 ```
-matchId, senderId, text (1 to 500 chars), createdAt, readAt
-(compound index on matchId + createdAt)
+matchId, senderId, recipientId, clientId (optional), text (1 to 500 chars),
+readAt (Date, default null), createdAt, updatedAt
+(compound indexes on matchId + createdAt, matchId + updatedAt, recipientId + readAt;
+ unique sparse index on senderId + clientId)
 ```
 
 ### Event

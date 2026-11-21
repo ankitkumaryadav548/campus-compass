@@ -28,7 +28,13 @@ MessageSchema.index({ matchId: 1, createdAt: 1 });
 MessageSchema.index({ matchId: 1, updatedAt: 1 });
 MessageSchema.index({ recipientId: 1, readAt: 1 });
 // Deduplication: prevent retried requests with same clientId from creating duplicate records
-MessageSchema.index({ senderId: 1, clientId: 1 }, { unique: true, sparse: true });
+MessageSchema.index(
+  { senderId: 1, clientId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { clientId: { $type: "string" } },
+  }
+);
 
 const Message =
   mongoose.models.Message ||

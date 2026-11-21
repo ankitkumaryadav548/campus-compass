@@ -95,6 +95,7 @@ export default function NotificationsClient({
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ read: newRead }),
+        keepalive: true,
       });
     } catch (err) {
       console.error("Failed to update notification read status:", err);

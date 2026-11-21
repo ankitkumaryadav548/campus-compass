@@ -5,6 +5,7 @@
 // - On desktop (>=1024px): Side-by-side active connections list on the left and chat on the right.
 
 import { redirect, notFound } from "next/navigation";
+import mongoose from "mongoose";
 import { MessageSquare, Users } from "lucide-react";
 import { requireUser } from "@/lib/session";
 import { connectDB } from "@/lib/mongodb";
@@ -21,12 +22,26 @@ export const metadata = {
 };
 
 export default async function CommunityChatPage({ params }) {
-  const { matchId } = await params;
+  const resolvedParams = await Promise.resolve(params);
+  const matchId = resolvedParams?.matchId;
+
+  if (!matchId || !mongoose.Types.ObjectId.isValid(matchId)) {
+    notFound();
+  }
+
   const user = await requireUser(`/community/chat/${matchId}`);
+  const userId = (user.id || user._id).toString();
+  const userObjId = mongoose.Types.ObjectId.isValid(userId)
+    ? new mongoose.Types.ObjectId(userId)
+    : userId;
 
   await connectDB();
 
-  const match = await BuddyMatch.findById(matchId)
+  // Scope match query to requesterId or recipientId matching current session user
+  const match = await BuddyMatch.findOne({
+    _id: matchId,
+    $or: [{ requesterId: userObjId }, { recipientId: userObjId }],
+  })
     .populate("requesterId", "name country regionGroup languages bio isSenior lastSeenAt")
     .populate("recipientId", "name country regionGroup languages bio isSenior lastSeenAt")
     .lean();
@@ -35,22 +50,23 @@ export default async function CommunityChatPage({ params }) {
     notFound();
   }
 
-  const userId = (user.id || user._id).toString();
-  const requester = match.requesterId;
-  const recipient = match.recipientId;
-
-  const isRequester = requester?._id?.toString() === userId;
-  const isRecipient = recipient?._id?.toString() === userId;
-
-  if (!isRequester && !isRecipient) {
-    redirect("/community");
-  }
-
   if (match.status !== "accepted") {
     redirect("/community?tab=matches");
   }
 
-  const partnerDoc = isRequester ? recipient : requester;
+  const reqIdStr = (match.requesterId?._id || match.requesterId)?.toString();
+  const recIdStr = (match.recipientId?._id || match.recipientId)?.toString();
+  const isRequester = reqIdStr === userId;
+  const isRecipient = recIdStr === userId;
+
+  if (!isRequester && !isRecipient) {
+    notFound();
+  }
+
+  const partnerDoc = isRequester ? match.recipientId : match.requesterId;
+  if (!partnerDoc || !partnerDoc._id) {
+    notFound();
+  }
 
   // Concurrently fetch initial messages, partner presence, and all user connections for desktop sidebar
   const [messagesResult, partnerPresence, allMatches] = await Promise.all([

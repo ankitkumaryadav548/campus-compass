@@ -102,7 +102,7 @@ export default function ChatWindow({
     }
   }, [matchId]);
 
-  // Initial scroll positioning
+  // Initial scroll positioning and read reporting on mount
   useEffect(() => {
     if (firstUnreadId && unreadDividerRef.current) {
       unreadDividerRef.current.scrollIntoView({ block: "center", behavior: "auto" });
@@ -110,12 +110,12 @@ export default function ChatWindow({
       scrollToBottom(false);
     }
 
-    // Report read when chat opens
     const lastIncoming = [...messages].reverse().find((m) => m.senderId !== currentUserId);
     if (lastIncoming) {
       reportMessagesRead(lastIncoming.createdAt);
     }
-  }, []); // Run once on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // 3-second Polling for incremental changes (?after) & presence
   const pollMessages = useCallback(async () => {
