@@ -22,8 +22,6 @@ export default async function CommunityChatPage({ params }) {
   const match = await BuddyMatch.findById(matchId)
     .populate("requesterId", "name country regionGroup languages bio isSenior")
     .populate("recipientId", "name country regionGroup languages bio isSenior")
-    .populate("studentId", "name country regionGroup languages bio isSenior")
-    .populate("buddyId", "name country regionGroup languages bio isSenior")
     .lean();
 
   if (!match) {
@@ -31,8 +29,8 @@ export default async function CommunityChatPage({ params }) {
   }
 
   const userId = (user.id || user._id).toString();
-  const requester = match.requesterId || match.studentId;
-  const recipient = match.recipientId || match.buddyId;
+  const requester = match.requesterId;
+  const recipient = match.recipientId;
 
   const isRequester = requester?._id?.toString() === userId;
   const isRecipient = recipient?._id?.toString() === userId;
