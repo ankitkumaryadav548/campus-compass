@@ -5,9 +5,6 @@
 
 import Link from "next/link";
 import {
-  UserPlus,
-  CheckCircle2,
-  UserX,
   MessageCircle,
   Bell,
   Check,
@@ -18,12 +15,6 @@ import { formatRelativeTime } from "@/lib/notificationText";
 
 function getNotificationIcon(iconName) {
   switch (iconName) {
-    case "user-plus":
-      return <UserPlus size={16} aria-hidden="true" />;
-    case "check-circle":
-      return <CheckCircle2 size={16} aria-hidden="true" />;
-    case "user-x":
-      return <UserX size={16} aria-hidden="true" />;
     case "message-circle":
       return <MessageCircle size={16} aria-hidden="true" />;
     default:
@@ -33,12 +24,6 @@ function getNotificationIcon(iconName) {
 
 function getIconContainerStyles(type) {
   switch (type) {
-    case "buddy_request":
-      return "bg-primary-100 text-primary-600 dark:bg-primary-950/70 dark:text-primary-400";
-    case "request_accepted":
-      return "bg-emerald-100 text-emerald-600 dark:bg-emerald-950/70 dark:text-emerald-400";
-    case "request_declined":
-      return "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400";
     case "new_message":
       return "bg-violet-100 text-violet-600 dark:bg-violet-950/70 dark:text-violet-400";
     default:
@@ -108,8 +93,8 @@ export default function NotificationItem({
           </p>
         </div>
 
-        {notification.body && !compact && (
-          <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2 mb-1">
+        {notification.body && (
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mb-1">
             {notification.body}
           </p>
         )}

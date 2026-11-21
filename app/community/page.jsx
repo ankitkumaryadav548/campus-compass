@@ -1,13 +1,13 @@
 // app/community/page.jsx
-// Community & Mentorship module:
-// Connection matching between peers and senior buddies, connection management, 1-to-1 chat, and campus mixer events.
+// Community & Connections module:
+// Direct peer and senior buddy discovery, direct messaging, safety tools (block/report), and campus mixer events.
 
 import { requireUser } from "@/lib/session";
 import { connectDB } from "@/lib/mongodb";
 import User from "@/models/User";
 import {
   getPeopleSuggestions,
-  getMyMatches,
+  getMyChats,
   getUpcomingEvents,
 } from "@/lib/community";
 import { noContentNote } from "@/lib/personalization";
@@ -45,9 +45,9 @@ export default async function CommunityPage({ searchParams }) {
     openToConnect: dbUser?.openToConnect !== false,
   };
 
-  const [peopleData, matches, events] = await Promise.all([
+  const [peopleData, chatsData, events] = await Promise.all([
     getPeopleSuggestions(currentUser, { kind, country, search }),
-    getMyMatches(currentUser),
+    getMyChats(currentUser),
     getUpcomingEvents(currentUser),
   ]);
 
@@ -64,13 +64,14 @@ export default async function CommunityPage({ searchParams }) {
             </h1>
           </div>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            Connect with peers and senior mentors, manage your connection requests, and attend campus mixer events.
+            Connect directly with peers and senior mentors, message students in real time, and attend campus mixer events.
           </p>
         </div>
 
         <CommunityClient
           peopleData={peopleData}
-          matches={matches}
+          chatsData={chatsData}
+          matches={[...chatsData.chats, ...chatsData.blockedChats]}
           events={events}
           currentUser={currentUser}
           noContentBannerText={noContentBannerText}

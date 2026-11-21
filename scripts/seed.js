@@ -131,12 +131,12 @@ EventSchema.index({ region: 1 });
 // ── BuddyMatch ──
 const BuddyMatchSchema = new mongoose.Schema(
   {
-    requesterId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-    recipientId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-    pairKey:     { type: String, required: true },
-    status:      { type: String, enum: ["pending", "accepted", "declined", "cancelled"], default: "pending" },
-    message:     { type: String, default: "" },
-    respondedAt: Date,
+    requesterId:   { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    recipientId:   { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    pairKey:       { type: String, required: true },
+    status:        { type: String, enum: ["active", "blocked"], default: "active" },
+    blockedBy:     { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    lastMessageAt: { type: Date, default: null },
   },
   { timestamps: true }
 );
@@ -192,15 +192,31 @@ const NotificationSchema = new mongoose.Schema(
   {
     recipientId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     actorId:     { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
-    type:        { type: String, enum: ["buddy_request", "request_accepted", "request_declined", "new_message"], required: true },
+    type:        { type: String, enum: ["new_message"], required: true },
     matchId:     { type: mongoose.Schema.Types.ObjectId, ref: "BuddyMatch", default: null },
     count:       { type: Number, default: 1 },
+    preview:     { type: String, maxLength: 85, default: "" },
     readAt:      { type: Date, default: null },
     isSample:    { type: Boolean, default: false },
   },
   { timestamps: true }
 );
 NotificationSchema.index({ recipientId: 1, readAt: 1, createdAt: -1 });
+
+// ── Report ──
+const ReportSchema = new mongoose.Schema(
+  {
+    reporterId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    reportedId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    matchId:    { type: mongoose.Schema.Types.ObjectId, ref: "BuddyMatch", required: true },
+    reason:     { type: String, enum: ["spam", "harassment", "inappropriate", "fake_profile", "other"], required: true },
+    details:    { type: String, maxlength: 300, default: "" },
+    status:     { type: String, enum: ["open", "reviewed"], default: "open" },
+  },
+  { timestamps: true }
+);
+ReportSchema.index({ status: 1, createdAt: -1 });
+ReportSchema.index({ reporterId: 1, matchId: 1 });
 
 // ── Register models ────────────────────────────────────────────────────────
 const User          = mongoose.models.User          || mongoose.model("User",          UserSchema);
@@ -213,6 +229,7 @@ const Message       = mongoose.models.Message       || mongoose.model("Message",
 const UserChecklist = mongoose.models.UserChecklist || mongoose.model("UserChecklist", UserChecklistSchema);
 const GuideProgress = mongoose.models.GuideProgress || mongoose.model("GuideProgress", GuideProgressSchema);
 const Notification  = mongoose.models.Notification  || mongoose.model("Notification",  NotificationSchema);
+const Report        = mongoose.models.Report        || mongoose.model("Report",        ReportSchema);
 
 // ── Helper ─────────────────────────────────────────────────────────────────
 /** Returns a date N days from now */
@@ -264,6 +281,12 @@ async function seed() {
       userId: { $in: sampleUserIds },
     }),
     Notification.deleteMany({ isSample: true }),
+    Report.deleteMany({
+      $or: [
+        { reporterId: { $in: sampleUserIds } },
+        { reportedId: { $in: sampleUserIds } },
+      ],
+    }),
   ]);
   console.log(`    Deleted: Users(${dU.deletedCount}) Guides(${dG.deletedCount}) ChecklistItems(${dC.deletedCount}) Places(${dP.deletedCount}) Events(${dE.deletedCount})\n`);
 
@@ -804,39 +827,36 @@ async function seed() {
 
   const buddyMatchesData = [
     {
-      requesterId: moses._id,
-      recipientId: david._id,
-      pairKey: generatePairKey(moses._id, david._id),
-      status: "accepted",
-      message: "[SAMPLE] Hi David, I just arrived from Uganda!",
+      requesterId:   moses._id,
+      recipientId:   david._id,
+      pairKey:       generatePairKey(moses._id, david._id),
+      status:        "active",
+      blockedBy:     null,
+      lastMessageAt: new Date(Date.now() - 1800000), // 30 mins ago
     },
     {
-      requesterId: moses._id,
-      recipientId: findUser("samuel.mwangi@sample.test")._id,
-      pairKey: generatePairKey(moses._id, findUser("samuel.mwangi@sample.test")._id),
-      status: "pending",
-      message: "[SAMPLE] Hi Samuel, I heard you're from East Africa – looking forward to connecting.",
+      requesterId:   linh._id,
+      recipientId:   minhB._id,
+      pairKey:       generatePairKey(linh._id, minhB._id),
+      status:        "active",
+      blockedBy:     null,
+      lastMessageAt: daysAgo(1),
     },
     {
-      requesterId: linh._id,
-      recipientId: minhB._id,
-      pairKey: generatePairKey(linh._id, minhB._id),
-      status: "accepted",
-      message: "[SAMPLE] Xin chào! Tôi mới đến.",
+      requesterId:   amina._id,
+      recipientId:   chidi._id,
+      pairKey:       generatePairKey(amina._id, chidi._id),
+      status:        "active",
+      blockedBy:     null,
+      lastMessageAt: daysAgo(3),
     },
     {
-      requesterId: amina._id,
-      recipientId: chidi._id,
-      pairKey: generatePairKey(amina._id, chidi._id),
-      status: "accepted",
-      message: "[SAMPLE] Hi Chidi, fellow Nigerian here!",
-    },
-    {
-      requesterId: linh._id,
-      recipientId: moses._id,
-      pairKey: generatePairKey(linh._id, moses._id),
-      status: "pending",
-      message: "[SAMPLE] Hi Moses! I saw we are both new students here, would love to connect!",
+      requesterId:   linh._id,
+      recipientId:   moses._id,
+      pairKey:       generatePairKey(linh._id, moses._id),
+      status:        "active",
+      blockedBy:     null,
+      lastMessageAt: new Date(Date.now() - 3600000), // 1 hour ago
     },
   ];
 
@@ -858,7 +878,7 @@ async function seed() {
       matchId:     mosesDavidMatch._id,
       senderId:    moses._id,
       recipientId: david._id,
-      text:        "Hi David, thanks for accepting my request! I will be flying to campus next week.",
+      text:        "Hi David, thanks for connecting! I will be flying to campus next week.",
       createdAt:   daysAgo(10),
       readAt:      daysAgo(10),
     },
@@ -889,13 +909,31 @@ async function seed() {
       createdAt:   new Date(Date.now() - 3 * 3600000),
       readAt:      new Date(Date.now() - 2 * 3600000),
     },
-    // 5. Today (sent message from Moses, unread by David -> two grey ticks)
+    // 5. Today (sent message from Moses)
     {
       matchId:     mosesDavidMatch._id,
       senderId:    moses._id,
       recipientId: david._id,
       text:        "Thank you! Which bank branch near Block A is best for international students?",
       createdAt:   new Date(Date.now() - 1800000), // 30 mins ago
+      readAt:      new Date(Date.now() - 1200000),
+    },
+    // 6. Today (reply from David to Moses, unread by Moses)
+    {
+      matchId:     mosesDavidMatch._id,
+      senderId:    david._id,
+      recipientId: moses._id,
+      text:        "The State Bank branch near Block A has an international student help desk!",
+      createdAt:   new Date(Date.now() - 900000), // 15 mins ago
+      readAt:      null,
+    },
+    // 7. Linh to Moses (one unread message from Linh who started the chat)
+    {
+      matchId:     linhMosesMatch._id,
+      senderId:    linh._id,
+      recipientId: moses._id,
+      text:        "Hi Moses! I saw we are both international students here, thought I would say hello!",
+      createdAt:   new Date(Date.now() - 3600000), // 1 hour ago
       readAt:      null,
     },
   ];
@@ -903,55 +941,24 @@ async function seed() {
   const messages = await Message.insertMany(sampleMessagesData);
   console.log(`    ✓  ${messages.length} messages inserted\n`);
 
+  // Update match lastMessageAt
+  await BuddyMatch.updateOne(
+    { _id: mosesDavidMatch._id },
+    { $set: { lastMessageAt: new Date(Date.now() - 900000) } }
+  );
+
   // ── 10. SAMPLE NOTIFICATIONS ──────────────────────────────────────────
   console.log("🔔  Inserting sample notifications…");
   const sampleNotificationsData = [
-    // 3 notifications for Moses
+    // Unread message notification for Moses from Linh (Linh started chat, Moses has not replied)
     {
       recipientId: moses._id,
       actorId:     linh._id,
-      type:        "buddy_request",
-      matchId:     linhMosesMatch ? linhMosesMatch._id : null,
-      count:       1,
-      readAt:      null,
-      isSample:    true,
-    },
-    {
-      recipientId: moses._id,
-      actorId:     david._id,
-      type:        "request_accepted",
-      matchId:     mosesDavidMatch._id,
-      count:       1,
-      readAt:      daysAgo(2),
-      isSample:    true,
-    },
-    {
-      recipientId: moses._id,
-      actorId:     david._id,
       type:        "new_message",
-      matchId:     mosesDavidMatch._id,
-      count:       2,
-      readAt:      null,
-      isSample:    true,
-    },
-
-    // 2 notifications for David
-    {
-      recipientId: david._id,
-      actorId:     samuel._id,
-      type:        "buddy_request",
-      matchId:     null,
+      matchId:     linhMosesMatch._id,
       count:       1,
+      preview:     "Hi Moses! I saw we are both international students here, thought I would say hello!",
       readAt:      null,
-      isSample:    true,
-    },
-    {
-      recipientId: david._id,
-      actorId:     moses._id,
-      type:        "request_accepted",
-      matchId:     mosesDavidMatch._id,
-      count:       1,
-      readAt:      daysAgo(1),
       isSample:    true,
     },
   ];

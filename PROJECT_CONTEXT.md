@@ -58,8 +58,8 @@ LLM_API_KEY
 | 4 | **Checklist** | Arrival documentation tracker with deadlines and progress bar |
 | 5 | **Guides** | SIM and Bank step-by-step guides with required documents, provider list, tips, and per-user step progress |
 | 6 | **Food Finder** | Map and list, filter by cuisine, diet (halal, vegetarian, etc.), country tags, student reviews |
-| 7 | **Community** | Connection matching (seniors and peers), campus events with RSVP, 1-to-1 chat |
-| 7.5 | **Notifications** | In-app notification bell, badge, dropdown, full history page, triggered by buddy requests and chat |
+| 7 | **Community** | Direct chat messaging between students, Block and Report safety tools, campus events with RSVP |
+| 7.5 | **Notifications** | In-app notification bell, badge, dropdown, full history page, triggered by new chat messages |
 | 8 | **Language Help** | Common phrases and campus glossary |
 | 9 | **Chatbot** | Answers using the student's profile + matching guides from DB |
 | 10 | **Admin Panel** | Role-protected CRUD for guides, places, events, checklist items |
@@ -89,6 +89,8 @@ still work and show regionGroup / ALL content with a friendly note.
 1. Same country
 2. Same language or regionGroup
 3. Any available international peer/senior open to connect
+
+Direct messaging without approval step; safety tools (Block and Report); openToConnect controls discovery in People.
 
 **Reusable helper:** Create ONE file `lib/personalization.js` used by every module.
 
@@ -136,8 +138,15 @@ countryTags[], address, location{lat,lng}, rating, reviews[]
 
 ### BuddyMatch
 ```
-requesterId, recipientId, pairKey, status (pending|accepted|declined|cancelled), message, respondedAt
-(unique index on pairKey)
+requesterId, recipientId, pairKey, status (active|blocked), blockedBy, lastMessageAt
+(unique index on pairKey; indexes on requesterId, recipientId, status, lastMessageAt)
+```
+
+### Report
+```
+reporterId, reportedId, matchId, reason (spam|harassment|inappropriate|fake_profile|other),
+details (max 300), status (open|reviewed, default open), createdAt
+(indexes on status + createdAt, reporterId + matchId)
 ```
 
 ### Message
@@ -155,8 +164,8 @@ title, description, date, region[], location, attendees[]
 
 ### Notification
 ```
-recipientId, actorId, type (buddy_request|request_accepted|request_declined|new_message),
-matchId, count, readAt, isSample, createdAt, updatedAt
+recipientId, actorId, type (new_message),
+matchId, count, preview (max 80 chars), readAt, isSample, createdAt, updatedAt
 (compound index on recipientId + readAt + createdAt desc; TTL index on createdAt 60 days)
 ```
 
@@ -182,6 +191,7 @@ app/
   guides/[category]/
   food/
   community/
+    chat/[matchId]/
   notifications/
   language/
   chat/
@@ -193,6 +203,11 @@ app/
     guides/
     places/
     buddies/
+      start/
+      [matchId]/
+        messages/
+        read/
+    reports/
     events/
     notifications/
     chat/
@@ -201,17 +216,35 @@ components/
   ui/
   layout/
   modules/
+    community/
+      chat/
     notifications/
 lib/
   mongodb.js
   auth.js
   personalization.js
+  community.js
+  reports.js
+  messages.js
+  presence.js
   notifications.js
   notificationText.js
   utils.js
 models/
+  User.js
+  Guide.js
+  GuideProgress.js
+  ChecklistItem.js
+  UserChecklist.js
+  Place.js
+  BuddyMatch.js
+  Report.js
+  Message.js
+  Event.js
+  Notification.js
 scripts/
   seed.js
+  migrate-direct-chat.js
 public/
 ```
 
@@ -283,6 +316,7 @@ Semantic HTML, alt text, aria-labels, keyboard navigation, sufficient contrast.
 
 ## 8. CODING RULES
 
+- Step 0: Do not start, restart, or stop the dev server.
 - Server Components for data pages; `"use client"` only for interactive parts
   (forms, map, chat, toggles).
 - Every API route: `connectDB()`, check session, validate input, return proper

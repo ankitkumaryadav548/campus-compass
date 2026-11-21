@@ -140,7 +140,7 @@ export default function NotificationsClient({
                 Notifications
               </h1>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Updates from your campus buddy requests, connection responses, and messages.
+                Updates from your messages and direct campus chats.
               </p>
             </div>
           </div>
@@ -217,7 +217,7 @@ export default function NotificationsClient({
           emptyDescription={
             activeTab === "unread"
               ? "All caught up! Check the 'All' tab to see past notification activity."
-              : "When buddies request connections or send you messages, you'll see them here."
+              : "When international students message you, you'll see them here."
           }
         />
 

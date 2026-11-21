@@ -21,12 +21,22 @@ export default function NotificationBell() {
   const dropdownRef = useRef(null);
   const pollTimerRef = useRef(null);
 
+  const unreadMessagesRef = useRef(0);
+
   // Broadcasts count change to Sidebar / mobile bottom navigation without a secondary loop
-  const broadcastCount = useCallback((count) => {
+  const broadcastCount = useCallback((count, unreadMessages) => {
     setUnreadCount(count);
+    if (typeof unreadMessages === "number") {
+      unreadMessagesRef.current = unreadMessages;
+    }
     if (typeof window !== "undefined") {
       window.dispatchEvent(
-        new CustomEvent("campus:unread-notifications", { detail: { count } })
+        new CustomEvent("campus:unread-notifications", {
+          detail: {
+            count,
+            unreadMessages: unreadMessagesRef.current,
+          },
+        })
       );
     }
   }, []);
@@ -37,7 +47,10 @@ export default function NotificationBell() {
       const res = await fetch("/api/notifications/unread-count");
       if (res.ok) {
         const data = await res.json();
-        broadcastCount(typeof data.count === "number" ? data.count : 0);
+        const count = typeof data.count === "number" ? data.count : 0;
+        const unreadMessages =
+          typeof data.unreadMessages === "number" ? data.unreadMessages : 0;
+        broadcastCount(count, unreadMessages);
       }
     } catch {
       // Silently ignore polling network failures

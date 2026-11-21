@@ -88,13 +88,6 @@ export async function POST(request, { params }) {
       );
     }
 
-    if (match.status !== "accepted") {
-      return NextResponse.json(
-        { error: "Chat is only available for accepted connections." },
-        { status: 403 }
-      );
-    }
-
     // Non-blocking throttled presence touch
     touchUserPresence(effectiveUserId).catch((e) => console.error("touchUserPresence error:", e));
 

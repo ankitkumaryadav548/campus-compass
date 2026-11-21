@@ -16,7 +16,7 @@ const NotificationSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ["buddy_request", "request_accepted", "request_declined", "new_message"],
+      enum: ["new_message", "buddy_request", "request_accepted", "request_declined"],
       required: true,
     },
     matchId: {
@@ -28,6 +28,11 @@ const NotificationSchema = new mongoose.Schema(
       type: Number,
       default: 1,
       min: 1,
+    },
+    preview: {
+      type: String,
+      maxLength: 85,
+      default: "",
     },
     readAt: {
       type: Date,
@@ -46,11 +51,14 @@ const NotificationSchema = new mongoose.Schema(
 // Compound index for fast queries: unread first or newest by recipient
 NotificationSchema.index({ recipientId: 1, readAt: 1, createdAt: -1 });
 
-// TTL index to automatically prune notifications older than 60 days (60 * 24 * 60 * 60 seconds)
+// Prune notifications older than 60 days
 NotificationSchema.index(
   { createdAt: 1 },
-  { expireAfterSeconds: 5184000 }
+  { expireAfterSeconds: 60 * 24 * 60 * 60 }
 );
 
-export default mongoose.models.Notification ||
+const Notification =
+  mongoose.models.Notification ||
   mongoose.model("Notification", NotificationSchema);
+
+export default Notification;

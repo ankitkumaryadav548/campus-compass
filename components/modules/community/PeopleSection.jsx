@@ -1,7 +1,7 @@
 "use client";
 // components/modules/community/PeopleSection.jsx
-// Peer and Senior connection suggestions with filter chips, country select, name search,
-// "Show me in People" visibility switch, connection request modal, and direct card response actions.
+// Peer and Senior connection directory with filter chips, country select, name search,
+// "Let others find and message me" visibility switch, and direct "Message" / "Open chat" actions.
 
 import { useState, useTransition, useMemo, useEffect, useRef } from "react";
 import Link from "next/link";
@@ -9,24 +9,17 @@ import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import {
   Users,
   Sparkles,
-  Send,
-  CheckCircle2,
-  XCircle,
-  Clock,
-  Loader2,
   Globe,
   Info,
-  Check,
-  X,
   MessageSquare,
   Search,
   SlidersHorizontal,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
-import Modal from "@/components/ui/Modal";
 import EmptyState from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
 
@@ -66,16 +59,10 @@ export default function PeopleSection({
   const [searchInput, setSearchInput] = useState(currentSearch);
   const searchTimeoutRef = useRef(null);
 
-  // Connection request modal state
-  const [selectedPerson, setSelectedPerson] = useState(null);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [requestMessage, setRequestMessage] = useState("");
-  const [submittingRequest, setSubmittingRequest] = useState(false);
+  // Starting chat state
+  const [startingChatId, setStartingChatId] = useState(null);
 
-  // Card action states
-  const [actingId, setActingId] = useState(null);
-
-  // "Show me in People" visibility switch state
+  // "Let others find and message me" visibility switch state
   const [openToConnect, setOpenToConnect] = useState(currentUser?.openToConnect ?? true);
   const [updatingVisibility, setUpdatingVisibility] = useState(false);
 
@@ -95,7 +82,6 @@ export default function PeopleSection({
 
   const updateFiltersInUrl = (updates) => {
     const current = new URLSearchParams(searchParams.toString());
-    // Ensure tab stays as people
     if (!current.has("tab")) {
       current.set("tab", "people");
     }
@@ -148,12 +134,18 @@ export default function PeopleSection({
     return Array.from(set).sort();
   }, [people]);
 
-  const hasCountryMatch = people.some((p) => p.isSameCountry);
+  // Check if current list has anyone from the user's country
+  const hasCountryMatch = useMemo(() => {
+    if (!currentUser?.country) return true;
+    return people.some((p) => p.country === currentUser.country);
+  }, [people, currentUser?.country]);
 
-  // Toggle "Show me in People"
+  // Visibility toggle
   const handleToggleVisibility = async () => {
     if (updatingVisibility) return;
+
     const nextVal = !openToConnect;
+    setOpenToConnect(nextVal);
     setUpdatingVisibility(true);
 
     try {
@@ -164,20 +156,21 @@ export default function PeopleSection({
       });
 
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Could not update visibility setting.");
+        throw new Error("Could not update profile visibility.");
       }
 
-      setOpenToConnect(nextVal);
       toast({
         message: nextVal
-          ? "You are now visible in People discovery."
-          : "You are now hidden from People discovery.",
-        type: nextVal ? "success" : "info",
+          ? "You can now receive direct messages from other students."
+          : "You are now hidden from new chats. Existing chats continue.",
+        type: "success",
       });
-    } catch (err) {
+
+      onConnectionsChanged?.();
+    } catch {
+      setOpenToConnect(!nextVal);
       toast({
-        message: err.message || "Failed to update visibility.",
+        message: "Failed to update visibility. Please try again.",
         type: "error",
       });
     } finally {
@@ -185,141 +178,40 @@ export default function PeopleSection({
     }
   };
 
-  // Open modal to send request
-  const handleOpenRequestModal = (person) => {
-    setSelectedPerson(person);
-    const greetingName = person.name.replace(/^\[SAMPLE\]\s*/i, "").replace(" (Sample)", "").split(" ")[0];
-    setRequestMessage(`Hi ${greetingName}, I recently arrived and would love to connect!`);
-    setModalOpen(true);
-  };
+  // Direct start chat handler
+  const handleStartChat = async (person) => {
+    if (startingChatId) return;
+    setStartingChatId(person._id);
 
-  // Submit connection request
-  const handleSendRequest = async (e) => {
-    e.preventDefault();
-    if (!selectedPerson || submittingRequest) return;
-
-    setSubmittingRequest(true);
     try {
-      const res = await fetch("/api/buddies/request", {
+      const res = await fetch("/api/buddies/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          recipientId: selectedPerson._id,
-          message: requestMessage.trim(),
-        }),
+        body: JSON.stringify({ recipientId: person._id }),
       });
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || "Could not send connection request.");
+        if (res.status === 429) {
+          toast({
+            message:
+              data.error ||
+              "You have reached your daily limit of 10 new chats. Please try again tomorrow.",
+            type: "warning",
+          });
+          return;
+        }
+        throw new Error(data.error || "Could not start chat.");
       }
 
-      toast({
-        message: "Connection request sent!",
-        type: "success",
-      });
-
-      // Update person card state locally
-      setPeople((prev) =>
-        prev.map((p) =>
-          p._id === selectedPerson._id
-            ? { ...p, requestStatus: "pending_sent", matchId: data.matchId }
-            : p
-        )
-      );
-
-      setModalOpen(false);
-      onConnectionsChanged?.();
+      router.push(`/community/chat/${data.matchId}`);
     } catch (err) {
       toast({
-        message: err.message || "Failed to send request.",
+        message: err.message || "Failed to start chat.",
         type: "error",
       });
     } finally {
-      setSubmittingRequest(false);
-    }
-  };
-
-  // Cancel sent request
-  const handleCancelRequest = async (personId, matchId) => {
-    if (!matchId || actingId) return;
-
-    setActingId(personId);
-    try {
-      const res = await fetch(`/api/buddies/${matchId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "cancel" }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "Could not cancel request.");
-      }
-
-      toast({ message: "Request cancelled.", type: "info" });
-
-      setPeople((prev) =>
-        prev.map((p) =>
-          p._id === personId
-            ? { ...p, requestStatus: "cancelled" }
-            : p
-        )
-      );
-
-      onConnectionsChanged?.();
-    } catch (err) {
-      toast({
-        message: err.message || "Failed to cancel request.",
-        type: "error",
-      });
-    } finally {
-      setActingId(null);
-    }
-  };
-
-  // Accept or decline an incoming request directly on the card
-  const handleRespondRequest = async (personId, matchId, action) => {
-    if (!matchId || actingId) return;
-
-    setActingId(personId);
-    try {
-      const res = await fetch(`/api/buddies/${matchId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "Could not update request.");
-      }
-
-      toast({
-        message: action === "accept" ? "Connection accepted! You can now chat." : "Request declined.",
-        type: action === "accept" ? "success" : "info",
-      });
-
-      setPeople((prev) =>
-        prev.map((p) =>
-          p._id === personId
-            ? {
-                ...p,
-                requestStatus: action === "accept" ? "accepted" : "declined",
-                matchId: data.matchId || p.matchId || matchId,
-              }
-            : p
-        )
-      );
-
-      onConnectionsChanged?.();
-    } catch (err) {
-      toast({
-        message: err.message || "Failed to update connection request.",
-        type: "error",
-      });
-    } finally {
-      setActingId(null);
+      setStartingChatId(null);
     }
   };
 
@@ -361,7 +253,7 @@ export default function PeopleSection({
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <span className="text-sm font-bold text-slate-900 dark:text-white">
-              Show me in People
+              Let others find and message me
             </span>
             <span
               className={cn(
@@ -376,8 +268,8 @@ export default function PeopleSection({
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
             {openToConnect
-              ? "Other students and senior buddies can discover your profile and send you connection requests."
-              : "You are currently hidden from search and cannot receive new connection requests."}
+              ? "Other students and senior buddies can discover your profile and start direct chats with you."
+              : "When turned off, people cannot start new chats with you, but your existing chats continue."}
           </p>
         </div>
 
@@ -385,7 +277,7 @@ export default function PeopleSection({
           type="button"
           role="switch"
           aria-checked={openToConnect}
-          aria-label="Show me in People directory"
+          aria-label="Let others find and message me"
           disabled={updatingVisibility}
           onClick={handleToggleVisibility}
           className={cn(
@@ -484,66 +376,70 @@ export default function PeopleSection({
         <EmptyState
           icon={<Users size={32} />}
           title="No people found"
-          description="Try selecting a different filter chip, clearing the country filter, or checking your search terms."
+          description="Try selecting a different category or clearing search filters to meet other students."
           action={
-            <Button size="sm" variant="secondary" onClick={handleClearFilters}>
+            <Button variant="secondary" size="sm" onClick={handleClearFilters}>
               Clear filters
             </Button>
           }
         />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {people.map((person) => {
-            const cleanName = person.name.replace(/^\[SAMPLE\]\s*/i, "").replace(" (Sample)", "");
-            const cleanBio = person.bio ? person.bio.replace(/^\[SAMPLE\]\s*/i, "") : "";
-            const isActing = actingId === person._id;
+            const isStarting = startingChatId === person._id;
+            const hasActiveChat = person.relation === "active" && person.matchId;
 
             return (
-              <Card key={person._id} className="p-5 flex flex-col justify-between hover:shadow-md transition-shadow">
+              <Card
+                key={person._id}
+                className="p-4 flex flex-col justify-between border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:shadow-card-hover transition-all"
+              >
                 <div>
-                  {/* Top info header */}
-                  <div className="flex items-start justify-between gap-3 mb-3">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-11 h-11 rounded-full bg-gradient-primary flex items-center justify-center text-white text-sm font-bold shrink-0 shadow-sm">
-                        {getInitials(cleanName)}
+                  {/* Top: Avatar + Name + Senior Badge */}
+                  <div className="flex items-start gap-3 mb-3">
+                    <div className="w-12 h-12 rounded-full bg-gradient-primary flex items-center justify-center text-white text-sm font-bold shrink-0 shadow-sm">
+                      {getInitials(person.name)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <h3 className="text-sm font-bold text-slate-900 dark:text-white truncate">
+                          {person.name.replace(" (Sample)", "")}
+                        </h3>
+                        {person.isSenior && (
+                          <Badge variant="neutral" className="text-[10px]">
+                            Senior
+                          </Badge>
+                        )}
                       </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <h3 className="text-sm font-bold text-slate-900 dark:text-white truncate">
-                            {cleanName}
-                          </h3>
-                          {person.isSenior && (
-                            <Badge variant="info" className="text-[10px]">
-                              Senior
-                            </Badge>
-                          )}
-                          {person.isSameCountry && (
-                            <Badge variant="success" className="text-[10px] flex items-center gap-1">
-                              <Sparkles size={10} aria-hidden="true" /> Great match
-                            </Badge>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                          <Globe size={11} aria-hidden="true" />
-                          <span>{person.country}</span>
-                          {person.regionGroup && (
-                            <span className="text-slate-400">• {person.regionGroup}</span>
-                          )}
-                        </div>
-                      </div>
+
+                      {/* Country & Region */}
+                      <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1 truncate mt-0.5">
+                        <Globe size={11} aria-hidden="true" />
+                        {person.country || "International"}
+                        {person.regionGroup && ` • ${person.regionGroup}`}
+                      </p>
                     </div>
                   </div>
 
+                  {/* Highlights: Same country badge */}
+                  {person.isSameCountry && (
+                    <div className="mb-2">
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-primary-700 dark:text-primary-300 bg-primary-50 dark:bg-primary-950/40 px-2 py-0.5 rounded-md border border-primary-100 dark:border-primary-900">
+                        <Sparkles size={10} aria-hidden="true" /> Same Country
+                      </span>
+                    </div>
+                  )}
+
                   {/* Bio */}
-                  {cleanBio && (
-                    <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed line-clamp-3 mb-3">
-                      {cleanBio}
+                  {person.bio && (
+                    <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-2 mb-3 leading-relaxed">
+                      {person.bio}
                     </p>
                   )}
 
-                  {/* Language tags */}
-                  {person.languages?.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mb-4">
+                  {/* Languages with shared indicator */}
+                  {person.languages && person.languages.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mb-4" aria-label="Languages spoken">
                       {person.languages.map((lang) => {
                         const isShared = person.sharedLanguages?.includes(lang);
                         return (
@@ -564,85 +460,27 @@ export default function PeopleSection({
                   )}
                 </div>
 
-                {/* Card Action / Status Bar */}
+                {/* Card Action Button: ONE main button ("Open chat" or "Message") */}
                 <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between min-h-[44px]">
-                  {/* Case 1: No match, or cancelled, or declined -> "Connect" */}
-                  {(!person.requestStatus ||
-                    person.requestStatus === "none" ||
-                    person.requestStatus === "cancelled" ||
-                    person.requestStatus === "declined") && (
+                  {hasActiveChat ? (
+                    <Link
+                      href={`/community/chat/${person.matchId}`}
+                      className="w-full inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-primary-600 text-white text-xs font-semibold hover:bg-primary-700 transition-colors shadow-sm min-h-[44px]"
+                    >
+                      <MessageSquare size={13} aria-hidden="true" /> Open chat
+                    </Link>
+                  ) : (
                     <Button
                       size="sm"
                       variant="primary"
-                      leftIcon={<Send size={12} />}
-                      onClick={() => handleOpenRequestModal(person)}
+                      className="w-full min-h-[44px]"
+                      disabled={isStarting}
+                      loading={isStarting}
+                      leftIcon={<MessageSquare size={13} />}
+                      onClick={() => handleStartChat(person)}
                     >
-                      Connect
+                      Message
                     </Button>
-                  )}
-
-                  {/* Case 2: Sent by current user -> "Request sent" + Cancel button */}
-                  {person.requestStatus === "pending_sent" && (
-                    <div className="flex items-center justify-between w-full">
-                      <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
-                        <Clock size={13} aria-hidden="true" /> Request sent
-                      </span>
-                      <button
-                        type="button"
-                        disabled={isActing}
-                        onClick={() => handleCancelRequest(person._id, person.matchId)}
-                        className="text-xs text-slate-400 hover:text-danger-600 dark:hover:text-danger-400 underline min-h-[36px] flex items-center"
-                      >
-                        {isActing ? "Cancelling…" : "Cancel"}
-                      </button>
-                    </div>
-                  )}
-
-                  {/* Case 3: Received by current user -> "Wants to connect" + Accept & Decline buttons */}
-                  {person.requestStatus === "pending_received" && (
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 w-full">
-                      <span className="inline-flex items-center gap-1 text-xs font-bold text-amber-600 dark:text-amber-400">
-                        <Clock size={13} aria-hidden="true" /> Wants to connect
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          disabled={isActing}
-                          leftIcon={<X size={12} />}
-                          onClick={() => handleRespondRequest(person._id, person.matchId, "decline")}
-                        >
-                          Decline
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="primary"
-                          disabled={isActing}
-                          loading={isActing}
-                          leftIcon={<Check size={12} />}
-                          onClick={() => handleRespondRequest(person._id, person.matchId, "accept")}
-                        >
-                          Accept
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Case 4: Accepted connection -> "Connected" + Open chat link */}
-                  {person.requestStatus === "accepted" && (
-                    <div className="flex items-center justify-between w-full">
-                      <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-success-600 dark:text-success-400">
-                        <CheckCircle2 size={13} aria-hidden="true" /> Connected
-                      </span>
-                      {person.matchId && (
-                        <Link
-                          href={`/community/chat/${person.matchId}`}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary-600 text-white text-xs font-semibold hover:bg-primary-700 transition-colors shadow-sm min-h-[36px]"
-                        >
-                          <MessageSquare size={12} aria-hidden="true" /> Open chat
-                        </Link>
-                      )}
-                    </div>
                   )}
                 </div>
               </Card>
@@ -658,61 +496,19 @@ export default function PeopleSection({
             variant="secondary"
             size="sm"
             onClick={handleLoadMore}
-            loading={loadingMore}
             disabled={loadingMore}
+            className="min-h-[40px] px-6"
           >
-            {loadingMore ? "Loading more…" : "Load more people"}
+            {loadingMore ? (
+              <span className="flex items-center gap-1.5">
+                <Loader2 size={14} className="animate-spin" /> Loading…
+              </span>
+            ) : (
+              "Load more people"
+            )}
           </Button>
         </div>
       )}
-
-      {/* Connection Request Modal */}
-      <Modal
-        isOpen={modalOpen}
-        onClose={() => setModalOpen(false)}
-        title={selectedPerson ? `Connect with ${selectedPerson.name.replace(/^\[SAMPLE\]\s*/i, "").replace(" (Sample)", "")}` : "Send Connection Request"}
-        size="md"
-      >
-        <form onSubmit={handleSendRequest} className="space-y-4">
-          <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-            Introduce yourself! Send a short note about your course, interests, or questions.
-          </p>
-
-          <div>
-            <textarea
-              rows={4}
-              value={requestMessage}
-              onChange={(e) => setRequestMessage(e.target.value)}
-              placeholder="Hi, I am new on campus and would love to connect..."
-              maxLength={300}
-              className="w-full text-xs p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none placeholder:text-slate-400"
-            />
-            <div className="flex justify-between items-center text-[10px] text-slate-400 mt-1">
-              <span>Plain text only</span>
-              <span>{requestMessage.trim().length} / 300</span>
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-2 pt-2">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => setModalOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              size="sm"
-              loading={submittingRequest}
-              leftIcon={submittingRequest ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
-            >
-              Send request
-            </Button>
-          </div>
-        </form>
-      </Modal>
     </div>
   );
 }

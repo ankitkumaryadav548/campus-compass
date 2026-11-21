@@ -1,21 +1,16 @@
 "use client";
 // components/modules/community/MyConnections.jsx
-// Displays incoming and outgoing connection requests, status indicators,
-// accept/decline action controls for recipients, cancel for requesters, and links to 1-to-1 chats.
+// Displays active chats list sorted by latest message, unread counters, and a collapsible Blocked group with Unblock actions.
 
 import { useState } from "react";
-import Link from "next/link";
 import {
   MessageSquare,
-  Check,
-  X,
-  Clock,
-  CheckCircle2,
-  Globe,
+  ChevronDown,
+  ChevronRight,
+  ShieldAlert,
   Users,
 } from "lucide-react";
 import Card from "@/components/ui/Card";
-import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import EmptyState from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
@@ -31,274 +26,172 @@ function getInitials(name) {
 }
 
 export default function MyConnections({
-  matches: initialMatches,
+  chats: initialChats = [],
+  blockedChats: initialBlockedChats = [],
+  matches,
+  currentUserId,
   onConnectionsChanged,
+  onNavigateToPeople,
 }) {
   const toast = useToast();
-  const [matches, setMatches] = useState(initialMatches);
-  const [actingId, setActingId] = useState(null);
 
-  const incomingRequests = matches.filter(
-    (m) => m.status === "pending" && (m.direction === "incoming" || !m.isRequester)
-  );
-  const sentRequests = matches.filter(
-    (m) => m.status === "pending" && (m.direction === "sent" || m.isRequester)
-  );
-  const acceptedMatches = matches.filter((m) => m.status === "accepted");
-  const pastMatches = matches.filter(
-    (m) => m.status === "declined" || m.status === "cancelled"
-  );
+  // Normalize data whether passed as { chats, blockedChats } or flat matches array
+  const normalizedChats = initialChats.length > 0 || initialBlockedChats.length > 0
+    ? initialChats
+    : (matches || []).filter((m) => m.status === "active");
 
-  const handleRespond = async (matchId, action) => {
-    if (actingId) return;
-    setActingId(matchId);
+  const normalizedBlocked = initialBlockedChats.length > 0
+    ? initialBlockedChats
+    : (matches || []).filter((m) => m.status === "blocked");
+
+  const [chats, setChats] = useState(normalizedChats);
+  const [blockedChats, setBlockedChats] = useState(normalizedBlocked);
+  const [showBlocked, setShowBlocked] = useState(false);
+  const [unblockingId, setUnblockingId] = useState(null);
+
+  const handleUnblock = async (matchId) => {
+    if (unblockingId) return;
+    setUnblockingId(matchId);
 
     try {
       const res = await fetch(`/api/buddies/${matchId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action }),
+        body: JSON.stringify({ action: "unblock" }),
       });
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || "Could not update connection request.");
+        throw new Error(data.error || "Could not unblock user.");
       }
 
       toast({
-        message:
-          action === "accept"
-            ? "Connection accepted! You can now chat."
-            : action === "cancel"
-            ? "Request cancelled."
-            : "Request declined.",
-        type: action === "accept" ? "success" : "info",
+        message: "User unblocked. You can now chat again.",
+        type: "success",
       });
 
-      setMatches((prev) =>
-        prev.map((m) =>
-          m._id === matchId ? { ...m, status: data.status } : m
-        )
-      );
+      // Move unblocked chat from blocked list to active chats
+      const unblocked = blockedChats.find((m) => m._id === matchId);
+      if (unblocked) {
+        setBlockedChats((prev) => prev.filter((m) => m._id !== matchId));
+        setChats((prev) => [{ ...unblocked, status: "active", blockedBy: null }, ...prev]);
+      }
 
       onConnectionsChanged?.();
     } catch (err) {
       toast({
-        message: err.message || "Failed to respond to request.",
+        message: err.message || "Failed to unblock user.",
         type: "error",
       });
     } finally {
-      setActingId(null);
+      setUnblockingId(null);
     }
   };
 
-  const hasAny = matches.length > 0;
+  const hasAnyChats = chats.length > 0 || blockedChats.length > 0;
 
-  if (!hasAny) {
+  if (!hasAnyChats) {
     return (
       <EmptyState
-        icon={<Users size={32} />}
-        title="No connections yet"
-        description="Browse the People tab to find peers and senior buddies to connect with."
+        icon={<MessageSquare size={32} />}
+        title="No chats yet"
+        description="Say hi to someone from your country in People."
+        action={
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={onNavigateToPeople}
+          >
+            Find people
+          </Button>
+        }
       />
     );
   }
 
   return (
     <div className="space-y-6">
-      {/* 1. Pending Incoming Requests */}
-      {incomingRequests.length > 0 && (
-        <div className="space-y-3">
-          <div className="flex items-center gap-2">
-            <Clock size={16} className="text-amber-500" aria-hidden="true" />
-            <h2 className="text-sm font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-              Incoming Requests ({incomingRequests.length})
-            </h2>
+      {/* Active Chats List */}
+      <Card className="divide-y divide-slate-100 dark:divide-slate-800 p-2 sm:p-3 overflow-hidden">
+        {chats.length === 0 ? (
+          <div className="p-8 text-center text-slate-500 text-xs">
+            No active conversations right now.
           </div>
-
-          <div className="space-y-3">
-            {incomingRequests.map((m) => {
-              const partnerName =
-                m.partner?.name?.replace(/^\[SAMPLE\]\s*/i, "").replace(" (Sample)", "") || "Student";
-              const isActing = actingId === m._id;
-
-              return (
-                <Card
-                  key={m._id}
-                  className="p-4 border-amber-200 dark:border-amber-800/60 bg-amber-50/20 dark:bg-amber-950/10"
-                >
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="flex items-start gap-3 min-w-0">
-                      <div className="w-10 h-10 rounded-full bg-gradient-primary flex items-center justify-center text-white text-xs font-bold shrink-0">
-                        {getInitials(partnerName)}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                            {partnerName}
-                          </h3>
-                          {m.partner?.isSenior && (
-                            <Badge variant="info" className="text-[10px]">
-                              Senior
-                            </Badge>
-                          )}
-                          {m.partner?.country && (
-                            <Badge variant="neutral" className="text-[10px]">
-                              {m.partner.country}
-                            </Badge>
-                          )}
-                        </div>
-                        {m.message && (
-                          <p className="text-xs text-slate-600 dark:text-slate-300 italic mt-1 bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-100 dark:border-slate-800">
-                            &ldquo;{m.message.replace(/^\[SAMPLE\]\s*/i, "")}&rdquo;
-                          </p>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        disabled={isActing}
-                        leftIcon={<X size={12} />}
-                        onClick={() => handleRespond(m._id, "decline")}
-                      >
-                        Decline
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="primary"
-                        disabled={isActing}
-                        loading={isActing}
-                        leftIcon={<Check size={12} />}
-                        onClick={() => handleRespond(m._id, "accept")}
-                      >
-                        Accept
-                      </Button>
-                    </div>
-                  </div>
-                </Card>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* 2. Pending Sent Requests */}
-      {sentRequests.length > 0 && (
-        <div className="space-y-3">
-          <div className="flex items-center gap-2">
-            <Clock size={16} className="text-amber-500" aria-hidden="true" />
-            <h2 className="text-sm font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-              Sent Requests ({sentRequests.length})
-            </h2>
-          </div>
-
-          <div className="space-y-3">
-            {sentRequests.map((m) => {
-              const partnerName =
-                m.partner?.name?.replace(/^\[SAMPLE\]\s*/i, "").replace(" (Sample)", "") || "Connection";
-              const isActing = actingId === m._id;
-
-              return (
-                <Card key={m._id} className="p-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="flex items-start gap-3 min-w-0">
-                      <div className="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-200 text-xs font-bold shrink-0">
-                        {getInitials(partnerName)}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                            {partnerName}
-                          </h3>
-                          {m.partner?.isSenior && (
-                            <Badge variant="info" className="text-[10px]">
-                              Senior
-                            </Badge>
-                          )}
-                          {m.partner?.country && (
-                            <Badge variant="neutral" className="text-[10px]">
-                              {m.partner.country}
-                            </Badge>
-                          )}
-                        </div>
-                        {m.message && (
-                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-1">
-                            &ldquo;{m.message.replace(/^\[SAMPLE\]\s*/i, "")}&rdquo;
-                          </p>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-3 shrink-0 self-end sm:self-auto">
-                      <span className="text-xs font-medium text-amber-600 dark:text-amber-400 flex items-center gap-1">
-                        <Clock size={12} /> Awaiting reply
-                      </span>
-                      <button
-                        type="button"
-                        disabled={isActing}
-                        onClick={() => handleRespond(m._id, "cancel")}
-                        className="text-xs text-slate-400 hover:text-danger-600 dark:hover:text-danger-400 underline min-h-[36px] flex items-center"
-                      >
-                        {isActing ? "Cancelling…" : "Cancel"}
-                      </button>
-                    </div>
-                  </div>
-                </Card>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* 3. Accepted Active Connections with Chat Link */}
-      <div className="space-y-3">
-        <div className="flex items-center gap-2">
-          <CheckCircle2 size={16} className="text-success-600 dark:text-success-400" aria-hidden="true" />
-          <h2 className="text-sm font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-            Active Connections ({acceptedMatches.length})
-          </h2>
-        </div>
-
-        {acceptedMatches.length === 0 ? (
-          <p className="text-xs text-slate-400 dark:text-slate-500 italic py-2">
-            No active connections yet.
-          </p>
         ) : (
-          <div className="space-y-1.5 bg-white dark:bg-slate-900 p-2.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
-            {[...acceptedMatches]
-              .sort((a, b) => {
-                const timeA = a.lastMessage?.createdAt ? new Date(a.lastMessage.createdAt).getTime() : 0;
-                const timeB = b.lastMessage?.createdAt ? new Date(b.lastMessage.createdAt).getTime() : 0;
-                return timeB - timeA;
-              })
-              .map((m) => (
-                <ChatListItem
-                  key={m._id}
-                  match={m}
-                  isSelected={false}
-                />
-              ))}
-          </div>
+          chats.map((chat) => (
+            <ChatListItem
+              key={chat._id}
+              match={chat}
+              currentUserId={currentUserId}
+            />
+          ))
         )}
-      </div>
+      </Card>
 
-      {/* 4. Past / Declined Records (Collapsed list) */}
-      {pastMatches.length > 0 && (
-        <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
-          <h3 className="text-xs font-semibold text-slate-400 dark:text-slate-500 mb-2">
-            Archived ({pastMatches.length})
-          </h3>
-          <div className="space-y-1.5 text-xs text-slate-400 dark:text-slate-500">
-            {pastMatches.map((m) => (
-              <div key={m._id} className="flex justify-between items-center py-1">
-                <span>{m.partner?.name?.replace(/^\[SAMPLE\]\s*/i, "").replace(" (Sample)", "")}</span>
-                <span className="capitalize">{m.status}</span>
-              </div>
-            ))}
-          </div>
+      {/* Blocked Conversations Collapsible Section */}
+      {blockedChats.length > 0 && (
+        <div className="border border-slate-200 dark:border-slate-800 rounded-2xl bg-white dark:bg-slate-900 overflow-hidden shadow-xs">
+          <button
+            type="button"
+            onClick={() => setShowBlocked((prev) => !prev)}
+            className="w-full flex items-center justify-between p-4 text-left hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors min-h-[44px]"
+            aria-expanded={showBlocked}
+          >
+            <div className="flex items-center gap-2">
+              <ShieldAlert size={16} className="text-slate-400" aria-hidden="true" />
+              <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                Blocked ({blockedChats.length})
+              </span>
+            </div>
+            {showBlocked ? (
+              <ChevronDown size={16} className="text-slate-400" />
+            ) : (
+              <ChevronRight size={16} className="text-slate-400" />
+            )}
+          </button>
+
+          {showBlocked && (
+            <div className="border-t border-slate-100 dark:border-slate-800 divide-y divide-slate-100 dark:divide-slate-800 p-2">
+              {blockedChats.map((chat) => {
+                const partnerName =
+                  chat.partner?.name?.replace(/^\[SAMPLE\]\s*/i, "").replace(" (Sample)", "") ||
+                  "Connection";
+                const isUnblocking = unblockingId === chat._id;
+
+                return (
+                  <div
+                    key={chat._id}
+                    className="flex items-center justify-between gap-3 p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors min-h-[52px]"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-9 h-9 rounded-full bg-slate-300 dark:bg-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-200 text-xs font-bold shrink-0">
+                        {getInitials(partnerName)}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
+                          {partnerName}
+                        </p>
+                        <p className="text-[10px] text-slate-400 truncate">
+                          {chat.partner?.country || "International"} • Blocked
+                        </p>
+                      </div>
+                    </div>
+
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      disabled={isUnblocking}
+                      loading={isUnblocking}
+                      onClick={() => handleUnblock(chat._id)}
+                      className="text-xs min-h-[36px] px-3 shrink-0"
+                    >
+                      Unblock
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
     </div>

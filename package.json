@@ -8,6 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "seed": "node --env-file=.env.local scripts/seed.js",
+    "migrate:direct": "node --env-file=.env.local scripts/migrate-direct-chat.js",
+    "migrate:notifications": "node --env-file=.env.local scripts/migrate-notifications.js",
     "migrate:buddy": "node --env-file=.env.local scripts/migrate-buddy-fields.js",
     "migrate:messages": "node --env-file=.env.local scripts/migrate-message-fields.js",
     "test:chatdates": "node scripts/test-chat-dates.js",

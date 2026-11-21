@@ -1,5 +1,5 @@
 // models/BuddyMatch.js
-// Tracks connection requests between students and buddies (seniors and peers).
+// Direct chat conversation records between onboarded students and buddies.
 
 import mongoose from "mongoose";
 
@@ -7,24 +7,25 @@ const { Schema } = mongoose;
 
 const BuddyMatchSchema = new Schema(
   {
-    requesterId: { type: Schema.Types.ObjectId, ref: "User", required: true },
-    recipientId: { type: Schema.Types.ObjectId, ref: "User", required: true },
-    pairKey:     { type: String, required: true },
-    status:      {
+    requesterId:   { type: Schema.Types.ObjectId, ref: "User", required: true },
+    recipientId:   { type: Schema.Types.ObjectId, ref: "User", required: true },
+    pairKey:       { type: String, required: true },
+    status:        {
       type: String,
-      enum: ["pending", "accepted", "declined", "cancelled"],
-      default: "pending",
+      enum: ["active", "blocked"],
+      default: "active",
     },
-    message:     { type: String, trim: true, default: "" },
-    respondedAt: { type: Date },
+    blockedBy:     { type: Schema.Types.ObjectId, ref: "User", default: null },
+    lastMessageAt: { type: Date, default: null },
   },
   { timestamps: true }
 );
 
-// ── Indexes ────────────────────────────────────────────────────────────────
+// Indexes
 BuddyMatchSchema.index({ requesterId: 1 });
 BuddyMatchSchema.index({ recipientId: 1 });
 BuddyMatchSchema.index({ status: 1 });
+BuddyMatchSchema.index({ lastMessageAt: -1 });
 // Direction-safe canonical pair key index ensuring exactly one record per user pair
 BuddyMatchSchema.index({ pairKey: 1 }, { unique: true });
 

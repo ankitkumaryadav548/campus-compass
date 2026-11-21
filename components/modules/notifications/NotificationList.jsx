@@ -27,7 +27,7 @@ export default function NotificationList({
   onToggleRead,
   compact = false,
   emptyTitle = "You are all caught up",
-  emptyDescription = "No notifications right now. Activity from buddy requests and messages will appear here.",
+  emptyDescription = "No notifications right now. Activity from new messages will appear here.",
 }) {
   if (isLoading && notifications.length === 0) {
     return (

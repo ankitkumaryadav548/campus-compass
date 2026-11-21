@@ -7,7 +7,7 @@ import BuddyMatch from "@/models/BuddyMatch";
 import User from "@/models/User";
 import { getMessagesForMatch, sendMessage } from "@/lib/messages";
 import { touchUserPresence, getPartnerPresenceForMatch } from "@/lib/presence";
-import { notifyNewMessage } from "@/lib/notifications";
+import { notifyNewMessage, markMatchNotificationReadForUser } from "@/lib/notifications";
 
 // Rate limiting: max 30 messages per 5 minutes per user
 const userMessageTimestamps = new Map();
@@ -76,13 +76,6 @@ export async function GET(request, { params }) {
     if (!isParticipant) {
       return NextResponse.json(
         { error: "You are not authorized to access this conversation." },
-        { status: 403 }
-      );
-    }
-
-    if (match.status !== "accepted") {
-      return NextResponse.json(
-        { error: "Chat is only available for accepted connections." },
         { status: 403 }
       );
     }
@@ -198,9 +191,9 @@ export async function POST(request, { params }) {
       );
     }
 
-    if (match.status !== "accepted") {
+    if (match.status !== "active") {
       return NextResponse.json(
-        { error: "You can only message in accepted connections." },
+        { error: "You cannot send messages in this chat." },
         { status: 403 }
       );
     }
@@ -226,8 +219,18 @@ export async function POST(request, { params }) {
       clientId: typeof clientId === "string" ? clientId : null,
     });
 
+    match.lastMessageAt = new Date();
+    await match.save();
+
+    // If sender is replying, mark their own unread notification for this match as read
     try {
-      await notifyNewMessage(match, effectiveUserId);
+      await markMatchNotificationReadForUser(matchId, effectiveUserId);
+    } catch (readErr) {
+      console.error("markMatchNotificationReadForUser failed:", readErr);
+    }
+
+    try {
+      await notifyNewMessage(match, savedMessage);
     } catch (notifErr) {
       console.error("notifyNewMessage failed:", notifErr);
     }

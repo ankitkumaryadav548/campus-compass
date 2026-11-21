@@ -95,12 +95,16 @@ export default function Sidebar() {
   const { data: session } = useSession();
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [unreadMessages, setUnreadMessages] = useState(0);
 
-  // Listen for broadcasted notification unread count updates
+  // Listen for broadcasted notification unread count and unread messages updates
   useEffect(() => {
     const handleUnreadUpdate = (e) => {
       if (typeof e.detail?.count === "number") {
         setUnreadCount(e.detail.count);
+      }
+      if (typeof e.detail?.unreadMessages === "number") {
+        setUnreadMessages(e.detail.unreadMessages);
       }
     };
 
@@ -147,7 +151,7 @@ export default function Sidebar() {
               <NavItem
                 key={item.href}
                 {...item}
-                hasBadge={item.label === "Community" && unreadCount > 0}
+                hasBadge={item.label === "Community" && unreadMessages > 0}
               />
             ))}
           </nav>
@@ -224,10 +228,10 @@ export default function Sidebar() {
         >
           <MoreHorizontal size={19} aria-hidden="true" />
           <span className="text-[10px]">More</span>
-          {unreadCount > 0 && (
+          {unreadMessages > 0 && (
             <span
               className="absolute top-2 right-2 w-2 h-2 rounded-full bg-danger-500"
-              aria-label="New notifications"
+              aria-label="New messages"
             />
           )}
         </button>
@@ -260,7 +264,7 @@ export default function Sidebar() {
             <div className="grid grid-cols-1 gap-2">
               {moreItems.map(({ href, icon: Icon, label, alert }) => {
                 const active = checkIsActive(pathname, href);
-                const hasDot = label === "Community" && unreadCount > 0;
+                const hasDot = label === "Community" && unreadMessages > 0;
                 return (
                   <Link
                     key={href}

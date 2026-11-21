@@ -2,15 +2,26 @@
 // components/modules/community/chat/ChatWindow.jsx
 // Main client component orchestrating the WhatsApp-style conversation:
 // Message bubbles, date dividers, unread pill, optimistic sending with clientId,
-// visibility-aware 3s polling, read reporting on focus/visible, and scroll retention.
+// visibility-aware 3s polling, read reporting on focus/visible, scroll retention,
+// first message banner, and Block & Report safety workflows.
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { ChevronDown, ShieldAlert, X, Loader2 } from "lucide-react";
+import {
+  ChevronDown,
+  ShieldAlert,
+  X,
+  Loader2,
+  Sparkles,
+  Flag,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import ChatHeader from "./ChatHeader";
 import MessageBubble from "./MessageBubble";
 import DateDivider from "./DateDivider";
 import MessageInput from "./MessageInput";
+import Modal from "@/components/ui/Modal";
+import Button from "@/components/ui/Button";
+import { useToast } from "@/components/ui/Toast";
 import { groupByDay } from "@/lib/chatDates";
 
 function generateClientId() {
@@ -25,18 +36,46 @@ export default function ChatWindow({
   initialFirstUnreadId = null,
   currentUserId,
   backHref = "/community?tab=matches",
+  matchStatus = "active",
+  blockedBy = null,
+  isStarter = true,
+  initialHasReplied = false,
 }) {
+  const toast = useToast();
+
   const [messages, setMessages] = useState(initialMessages);
   const [partnerPresence, setPartnerPresence] = useState(
-    initialPartnerPresence || { online: Boolean(partner?.online), lastSeenAt: partner?.lastSeenAt || null }
+    initialPartnerPresence || {
+      online: Boolean(partner?.online),
+      lastSeenAt: partner?.lastSeenAt || null,
+    }
   );
   const [hasMore, setHasMore] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
 
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
-  const [showSafetyNotice, setShowSafetyNotice] = useState(true);
   const [firstUnreadId, setFirstUnreadId] = useState(initialFirstUnreadId);
+
+  // Safety & Block states
+  const [chatStatus, setChatStatus] = useState(matchStatus);
+  const [chatBlockedBy, setChatBlockedBy] = useState(blockedBy);
+
+  // Track if current user has replied in this chat
+  const [hasReplied, setHasReplied] = useState(
+    initialHasReplied || initialMessages.some((m) => m.senderId === currentUserId)
+  );
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+
+  // Dialog states
+  const [blockModalOpen, setBlockModalOpen] = useState(false);
+  const [blocking, setBlocking] = useState(false);
+
+  const [reportModalOpen, setReportModalOpen] = useState(false);
+  const [reporting, setReporting] = useState(false);
+  const [reportReason, setReportReason] = useState("spam");
+  const [reportDetails, setReportDetails] = useState("");
+  const [reportAlsoBlock, setReportAlsoBlock] = useState(true);
 
   // Floating scroll button & unread indicator
   const [showScrollBottom, setShowScrollBottom] = useState(false);
@@ -87,20 +126,23 @@ export default function ChatWindow({
   };
 
   // Mark unread messages as read on the server
-  const reportMessagesRead = useCallback(async (upToDate) => {
-    if (!upToDate || typeof document === "undefined") return;
-    if (document.visibilityState !== "visible") return;
+  const reportMessagesRead = useCallback(
+    async (upToDate) => {
+      if (!upToDate || typeof document === "undefined") return;
+      if (document.visibilityState !== "visible") return;
 
-    try {
-      await fetch(`/api/buddies/${matchId}/read`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ upTo: upToDate }),
-      });
-    } catch (err) {
-      console.error("reportMessagesRead error:", err);
-    }
-  }, [matchId]);
+      try {
+        await fetch(`/api/buddies/${matchId}/read`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ upTo: upToDate }),
+        });
+      } catch (err) {
+        console.error("reportMessagesRead error:", err);
+      }
+    },
+    [matchId]
+  );
 
   // Initial scroll positioning and read reporting on mount
   useEffect(() => {
@@ -168,7 +210,6 @@ export default function ChatWindow({
             setUnseenCountWhileScrolledUp((c) => c + 1);
           }
 
-          // If window is visible and focused, mark as read
           if (document.hasFocus()) {
             reportMessagesRead(latestIncomingDate);
           }
@@ -257,7 +298,6 @@ export default function ChatWindow({
     const clientId = retryClientId || generateClientId();
 
     if (!retryClientId) {
-      // Optimistic message added immediately
       const optimisticMessage = {
         id: clientId,
         clientId,
@@ -269,9 +309,9 @@ export default function ChatWindow({
 
       setMessages((prev) => [...prev, optimisticMessage]);
       setText("");
+      setHasReplied(true);
       setTimeout(() => scrollToBottom(true), 50);
     } else {
-      // Retry: mark back to pending
       setMessages((prev) =>
         prev.map((m) => (m.clientId === retryClientId ? { ...m, status: "pending" } : m))
       );
@@ -290,7 +330,11 @@ export default function ChatWindow({
       });
 
       if (!res.ok) {
-        throw new Error("Send failed");
+        const errorData = await res.json().catch(() => ({}));
+        if (res.status === 403 && errorData.error) {
+          toast({ message: errorData.error, type: "error" });
+        }
+        throw new Error(errorData.error || "Send failed");
       }
 
       const data = await res.json();
@@ -315,84 +359,188 @@ export default function ChatWindow({
     handleSendMessage(failedMsg.text, failedMsg.clientId);
   };
 
-  // Group messages by day and within day group by consecutive sender (within 5 minutes)
+  // Unblock action
+  const handleUnblock = async () => {
+    try {
+      const res = await fetch(`/api/buddies/${matchId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "unblock" }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not unblock user.");
+      setChatStatus("active");
+      setChatBlockedBy(null);
+      toast({ message: "User unblocked. You can now send messages.", type: "success" });
+    } catch (err) {
+      toast({ message: err.message || "Failed to unblock.", type: "error" });
+    }
+  };
+
+  // Block confirm action
+  const handleConfirmBlock = async () => {
+    setBlocking(true);
+    try {
+      const res = await fetch(`/api/buddies/${matchId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "block" }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not block user.");
+      setChatStatus("blocked");
+      setChatBlockedBy(currentUserId);
+      setBlockModalOpen(false);
+      toast({ message: "User blocked.", type: "info" });
+    } catch (err) {
+      toast({ message: err.message || "Failed to block user.", type: "error" });
+    } finally {
+      setBlocking(false);
+    }
+  };
+
+  // Report submit action
+  const handleSubmitReport = async () => {
+    setReporting(true);
+    try {
+      const res = await fetch("/api/reports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          matchId,
+          reason: reportReason,
+          details: reportDetails.trim(),
+          alsoBlock: reportAlsoBlock,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not submit report.");
+      if (data.blocked) {
+        setChatStatus("blocked");
+        setChatBlockedBy(currentUserId);
+      }
+      setReportModalOpen(false);
+      toast({
+        message: "Thank you for letting us know. Your report has been submitted.",
+        type: "success",
+      });
+    } catch (err) {
+      toast({ message: err.message || "Failed to submit report.", type: "error" });
+    } finally {
+      setReporting(false);
+    }
+  };
+
+  // Group messages by day
   const dayGroups = useMemo(() => groupByDay(messages), [messages]);
 
-  const partnerName = partner?.name?.replace(/^\[SAMPLE\]\s*/i, "").replace(" (Sample)", "") || "Connection";
+  const partnerName =
+    partner?.name?.replace(/^\[SAMPLE\]\s*/i, "").replace(" (Sample)", "") || "Connection";
+
+  const isBlocked = chatStatus === "blocked";
+  const isBlocker = isBlocked && chatBlockedBy === currentUserId;
+
+  // Show "started this chat" banner if other person started and current user has not sent any message yet
+  const showFirstMessageBanner =
+    !isStarter && !hasReplied && !bannerDismissed && chatStatus === "active";
 
   return (
     <div className="flex flex-col h-[82vh] min-h-[520px] max-h-[820px] rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-card overflow-hidden relative">
       {/* Accessible live region */}
-      <span className="sr-only" aria-live="polite">
+      <div className="sr-only" aria-live="polite" aria-atomic="true">
         {liveAnnouncement}
-      </span>
+      </div>
 
-      {/* Top Header */}
+      {/* WhatsApp Chat Header with Block & Report Menu */}
       <ChatHeader
         partner={partner}
         presence={partnerPresence}
         backHref={backHref}
+        isBlocked={isBlocked}
+        canUnblock={isBlocker}
+        onOpenBlockDialog={() => setBlockModalOpen(true)}
+        onOpenReportDialog={() => setReportModalOpen(true)}
+        onUnblock={handleUnblock}
       />
 
-      {/* Dismissible Security Warning */}
-      {showSafetyNotice && (
-        <div className="bg-amber-50/90 dark:bg-amber-950/30 px-3.5 py-1.5 border-b border-amber-200/80 dark:border-amber-900/40 text-[11px] text-amber-900 dark:text-amber-200 flex items-center justify-between gap-2 shrink-0 select-none">
-          <div className="flex items-center gap-1.5 min-w-0">
-            <ShieldAlert size={13} className="text-amber-600 dark:text-amber-400 shrink-0" aria-hidden="true" />
-            <span className="truncate">Safety tip: Never share passwords, OTPs, or bank account credentials in chat.</span>
+      {/* First Message Banner (shown when other person started chat and current user hasn't replied yet) */}
+      {showFirstMessageBanner && (
+        <div className="mx-3 my-2 p-3 rounded-xl border border-primary-200 dark:border-primary-800 bg-primary-50/90 dark:bg-primary-950/40 text-xs text-slate-800 dark:text-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-xs shrink-0 animate-in fade-in-50">
+          <div className="flex items-center gap-2">
+            <Sparkles size={15} className="text-primary-600 dark:text-primary-400 shrink-0" aria-hidden="true" />
+            <span>
+              <strong>{partnerName}</strong> started this chat. You can reply, block or report.
+            </span>
           </div>
-          <button
-            type="button"
-            onClick={() => setShowSafetyNotice(false)}
-            className="p-1 text-amber-700 hover:text-amber-900 dark:text-amber-400 dark:hover:text-amber-100 rounded-md"
-            aria-label="Dismiss security notice"
-          >
-            <X size={13} />
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setBlockModalOpen(true)}
+              className="px-2.5 py-1 rounded-lg text-[11px] font-semibold text-danger-600 dark:text-danger-400 hover:bg-danger-50 dark:hover:bg-danger-950/60 min-h-[36px]"
+            >
+              Block
+            </button>
+            <button
+              type="button"
+              onClick={() => setReportModalOpen(true)}
+              className="px-2.5 py-1 rounded-lg text-[11px] font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 min-h-[36px]"
+            >
+              Report
+            </button>
+            <button
+              type="button"
+              onClick={() => setBannerDismissed(true)}
+              className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg"
+              aria-label="Dismiss banner"
+            >
+              <X size={14} />
+            </button>
+          </div>
         </div>
       )}
 
-      {/* Messages Scroll Area */}
+      {/* Scrollable Conversation History Area */}
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto p-4 bg-slate-50/50 dark:bg-slate-950/40"
+        className="flex-1 overflow-y-auto px-3 sm:px-4 py-3 space-y-4 bg-slate-50/50 dark:bg-slate-950/30"
       >
-        {/* Load older messages button */}
+        {/* Load older messages button if available */}
         {hasMore && (
-          <div className="flex justify-center mb-3">
+          <div className="flex justify-center pt-1 pb-2">
             <button
               type="button"
               onClick={handleLoadOlder}
               disabled={loadingOlder}
-              className="text-[11px] font-semibold text-primary-600 dark:text-primary-400 hover:underline px-3 py-1 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs flex items-center gap-1"
+              className="text-xs text-primary-600 dark:text-primary-400 hover:underline font-semibold flex items-center gap-1.5 min-h-[36px] px-3 py-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
             >
-              {loadingOlder && <Loader2 size={11} className="animate-spin" />}
-              Load older messages
+              {loadingOlder ? (
+                <>
+                  <Loader2 size={12} className="animate-spin" /> Loading older messages…
+                </>
+              ) : (
+                "Load older messages"
+              )}
             </button>
           </div>
         )}
 
         {messages.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-center text-slate-400 py-16">
-            <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">No messages yet</p>
-            <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-              Say hello to start chatting with {partnerName.split(" ")[0]}!
-            </p>
+          <div className="h-full flex flex-col items-center justify-center text-center p-6 text-slate-400">
+            <p className="text-xs">No messages yet. Say hello to start chatting!</p>
           </div>
         ) : (
           dayGroups.map((group) => (
-            <div key={group.dayKey}>
-              {/* Date Divider between days */}
-              <DateDivider label={group.dayLabel} />
+            <div key={group.dateKey} className="space-y-1">
+              {/* WhatsApp Date Divider Pill */}
+              <DateDivider label={group.label} />
 
-              {/* Messages within this day */}
+              {/* Message Group */}
               {group.messages.map((msg, index) => {
                 const isMine = msg.senderId === currentUserId;
                 const prev = group.messages[index - 1];
                 const next = group.messages[index + 1];
 
-                // Consecutive group logic (same sender within 5 mins)
                 const isSameSenderAsPrev = prev && prev.senderId === msg.senderId;
                 const timeDiffPrev = prev
                   ? Math.abs(new Date(msg.createdAt) - new Date(prev.createdAt))
@@ -453,15 +601,175 @@ export default function ChatWindow({
         </button>
       )}
 
-      {/* Message Input Bar */}
-      <MessageInput
-        value={text}
-        onChange={setText}
-        onSend={() => handleSendMessage()}
-        disabled={false}
-        sending={sending}
-        partnerName={partnerName}
-      />
+      {/* Bottom Area: Message Input OR Blocked Bar */}
+      {isBlocked ? (
+        isBlocker ? (
+          <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 flex items-center justify-between gap-3 shrink-0">
+            <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400">
+              <ShieldAlert size={16} className="text-amber-500 shrink-0" aria-hidden="true" />
+              <span>You blocked {partnerName}. Unblock to send messages.</span>
+            </div>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleUnblock}
+              className="text-xs min-h-[36px]"
+            >
+              Unblock
+            </Button>
+          </div>
+        ) : (
+          <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 flex items-center justify-center shrink-0">
+            <span className="text-xs text-slate-400 dark:text-slate-500 font-medium">
+              You cannot send messages in this chat.
+            </span>
+          </div>
+        )
+      ) : (
+        <MessageInput
+          value={text}
+          onChange={setText}
+          onSend={() => handleSendMessage()}
+          disabled={false}
+          sending={sending}
+          partnerName={partnerName}
+        />
+      )}
+
+      {/* Block Confirmation Dialog */}
+      <Modal
+        open={blockModalOpen}
+        onClose={() => setBlockModalOpen(false)}
+        title={`Block ${partnerName}?`}
+      >
+        <div className="space-y-4">
+          <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+            {partnerName} will not be able to send you messages or find your profile in People.
+            Your existing message history will be preserved. You can unblock them at any time.
+          </p>
+
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={blocking}
+              onClick={() => setBlockModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              loading={blocking}
+              disabled={blocking}
+              onClick={handleConfirmBlock}
+            >
+              Block {partnerName.split(" ")[0]}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Report Dialog */}
+      <Modal
+        open={reportModalOpen}
+        onClose={() => setReportModalOpen(false)}
+        title={`Report ${partnerName}`}
+      >
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleSubmitReport();
+          }}
+          className="space-y-4"
+        >
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Your report is confidential. {partnerName.split(" ")[0]} will not be notified of who reported them.
+          </p>
+
+          {/* Reason Radio Group */}
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-slate-800 dark:text-slate-200">
+              Why are you reporting this user?
+            </label>
+            <div className="space-y-1.5" role="radiogroup" aria-label="Report reasons">
+              {[
+                { id: "spam", label: "Spam or advertising" },
+                { id: "harassment", label: "Harassment or bullying" },
+                { id: "inappropriate", label: "Inappropriate or offensive content" },
+                { id: "fake_profile", label: "Fake or misleading profile" },
+                { id: "other", label: "Other issue" },
+              ].map((item) => (
+                <label
+                  key={item.id}
+                  className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/60 cursor-pointer text-xs text-slate-700 dark:text-slate-300"
+                >
+                  <input
+                    type="radio"
+                    name="reportReason"
+                    value={item.id}
+                    checked={reportReason === item.id}
+                    onChange={(e) => setReportReason(e.target.value)}
+                    className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-slate-300"
+                  />
+                  <span>{item.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* Optional Details with counter */}
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-slate-800 dark:text-slate-200">
+              Details (optional)
+            </label>
+            <textarea
+              rows={3}
+              value={reportDetails}
+              onChange={(e) => setReportDetails(e.target.value)}
+              maxLength={300}
+              placeholder="Provide any additional context for our team…"
+              className="w-full text-xs p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
+            />
+            <div className="text-right text-[10px] text-slate-400">
+              {reportDetails.length} / 300
+            </div>
+          </div>
+
+          {/* Also block checkbox */}
+          <label className="flex items-center gap-2 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 cursor-pointer text-xs text-slate-700 dark:text-slate-300">
+            <input
+              type="checkbox"
+              checked={reportAlsoBlock}
+              onChange={(e) => setReportAlsoBlock(e.target.checked)}
+              className="h-4 w-4 rounded text-primary-600 focus:ring-primary-500 border-slate-300"
+            />
+            <span>Also block this user so they cannot message you</span>
+          </label>
+
+          {/* Modal Actions */}
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={reporting}
+              onClick={() => setReportModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              size="sm"
+              loading={reporting}
+              disabled={reporting}
+            >
+              Submit report
+            </Button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

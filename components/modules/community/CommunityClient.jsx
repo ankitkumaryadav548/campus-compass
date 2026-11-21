@@ -1,12 +1,12 @@
 "use client";
 // components/modules/community/CommunityClient.jsx
-// Client orchestrator managing tabs (People / My Connections / Campus Events),
-// URL synchronization (?tab=people|matches|events, with ?tab=buddies alias),
-// and cross-tab connection status refreshing.
+// Client orchestrator managing tabs (People / Chats / Campus Events),
+// URL synchronization (?tab=people|chats|events, with ?tab=buddies and ?tab=matches aliases),
+// and active tab switching with unread message priority.
 
 import { useState, useEffect, useTransition } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import { Users, UserCheck, Calendar } from "lucide-react";
+import { Users, MessageSquare, Calendar } from "lucide-react";
 import { cn } from "@/lib/utils";
 import PeopleSection from "./PeopleSection";
 import MyConnections from "./MyConnections";
@@ -14,8 +14,9 @@ import EventsSection from "./EventsSection";
 
 export default function CommunityClient({
   peopleData,
-  matches,
-  events,
+  chatsData,
+  matches = [],
+  events = [],
   currentUser,
   noContentBannerText,
 }) {
@@ -24,23 +25,49 @@ export default function CommunityClient({
   const searchParams = useSearchParams();
   const [, startTransition] = useTransition();
 
+  // Normalize chats data
+  const chatsList = chatsData?.chats || matches.filter((m) => m.status === "active") || [];
+  const blockedList = chatsData?.blockedChats || matches.filter((m) => m.status === "blocked") || [];
+
   const rawTab = searchParams.get("tab");
-  const tabParam = rawTab === "buddies" ? "people" : rawTab;
+  // Aliases: buddies -> people, matches -> chats
+  const resolvedTabParam =
+    rawTab === "buddies" ? "people" : rawTab === "matches" ? "chats" : rawTab;
 
-  const hasIncomingPending = matches.some(
-    (m) => m.status === "pending" && (m.direction === "incoming" || !m.isRequester)
-  );
+  // Unread messages count
+  const totalUnreadMessages = chatsList.reduce((sum, c) => sum + (c.unreadCount || 0), 0);
+  const [unreadMessages, setUnreadMessages] = useState(totalUnreadMessages);
 
-  const defaultTab = hasIncomingPending ? "matches" : "people";
+  useEffect(() => {
+    setUnreadMessages(totalUnreadMessages);
+  }, [totalUnreadMessages]);
+
+  // Keep unread messages count live with notifications/presence polling
+  useEffect(() => {
+    const handleUnreadUpdate = (e) => {
+      if (typeof e.detail?.unreadMessages === "number") {
+        setUnreadMessages(e.detail.unreadMessages);
+      }
+    };
+
+    window.addEventListener("campus:unread-notifications", handleUnreadUpdate);
+    return () => {
+      window.removeEventListener("campus:unread-notifications", handleUnreadUpdate);
+    };
+  }, []);
+
+  // Default tab: Chats if user has unread messages, otherwise People
+  const defaultTab = totalUnreadMessages > 0 ? "chats" : "people";
 
   const [activeTab, setActiveTab] = useState(
-    ["people", "matches", "events"].includes(tabParam) ? tabParam : defaultTab
+    ["people", "chats", "events"].includes(resolvedTabParam) ? resolvedTabParam : defaultTab
   );
 
   useEffect(() => {
     const currentRaw = searchParams.get("tab");
-    const resolved = currentRaw === "buddies" ? "people" : currentRaw;
-    if (resolved && ["people", "matches", "events"].includes(resolved)) {
+    const resolved =
+      currentRaw === "buddies" ? "people" : currentRaw === "matches" ? "chats" : currentRaw;
+    if (resolved && ["people", "chats", "events"].includes(resolved)) {
       setActiveTab(resolved);
     }
   }, [searchParams]);
@@ -49,6 +76,7 @@ export default function CommunityClient({
     setActiveTab(tabId);
     startTransition(() => {
       const current = new URLSearchParams(searchParams.toString());
+      // Keep URL tab query synced
       current.set("tab", tabId);
       router.replace(`${pathname}?${current.toString()}`, { scroll: false });
     });
@@ -59,10 +87,6 @@ export default function CommunityClient({
       router.refresh();
     });
   };
-
-  const pendingIncomingCount = matches.filter(
-    (m) => m.status === "pending" && (m.direction === "incoming" || !m.isRequester)
-  ).length;
 
   const peopleCount = peopleData?.totalCount ?? peopleData?.people?.length ?? 0;
 
@@ -96,20 +120,20 @@ export default function CommunityClient({
         <button
           type="button"
           role="tab"
-          aria-selected={activeTab === "matches"}
-          onClick={() => handleTabChange("matches")}
+          aria-selected={activeTab === "chats"}
+          onClick={() => handleTabChange("chats")}
           className={cn(
             "flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all duration-150 min-h-[44px] shrink-0",
-            activeTab === "matches"
+            activeTab === "chats"
               ? "bg-primary-50 text-primary-700 dark:bg-primary-950/40 dark:text-primary-300 shadow-sm"
               : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
           )}
         >
-          <UserCheck size={16} aria-hidden="true" />
-          My Connections
-          {pendingIncomingCount > 0 && (
-            <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500 text-white font-bold animate-pulse">
-              {pendingIncomingCount} new
+          <MessageSquare size={16} aria-hidden="true" />
+          Chats
+          {unreadMessages > 0 && (
+            <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500 text-white font-bold animate-pulse">
+              {unreadMessages}
             </span>
           )}
         </button>
@@ -144,10 +168,14 @@ export default function CommunityClient({
         />
       )}
 
-      {activeTab === "matches" && (
+      {activeTab === "chats" && (
         <MyConnections
+          chats={chatsList}
+          blockedChats={blockedList}
           matches={matches}
+          currentUserId={currentUser?.id || currentUser?._id}
           onConnectionsChanged={handleRefreshConnections}
+          onNavigateToPeople={() => handleTabChange("people")}
         />
       )}
 
