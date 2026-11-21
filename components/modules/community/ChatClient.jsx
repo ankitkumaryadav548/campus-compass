@@ -38,12 +38,20 @@ export default function ChatClient({
   const [messages, setMessages] = useState(initialMessages);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
-  const messagesEndRef = useRef(null);
+  const messagesContainerRef = useRef(null);
+  const textareaRef = useRef(null);
 
   const scrollToBottom = (smooth = true) => {
-    messagesEndRef.current?.scrollIntoView({
-      behavior: smooth ? "smooth" : "auto",
-    });
+    const el = messagesContainerRef.current;
+    if (!el) return;
+    if (smooth) {
+      el.scrollTo({
+        top: el.scrollHeight,
+        behavior: "smooth",
+      });
+    } else {
+      el.scrollTop = el.scrollHeight;
+    }
   };
 
   useEffect(() => {
@@ -113,6 +121,7 @@ export default function ChatClient({
       const data = await res.json();
       setMessages((prev) => [...prev, data.message]);
       setText("");
+      textareaRef.current?.focus();
     } catch (err) {
       toast({
         message: err.message || "Failed to send message.",
@@ -180,7 +189,7 @@ export default function ChatClient({
       </div>
 
       {/* Messages Scroll Area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-3">
         {messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center text-slate-400 py-12">
             <p className="text-xs">No messages yet.</p>
@@ -224,7 +233,6 @@ export default function ChatClient({
             );
           })
         )}
-        <div ref={messagesEndRef} />
       </div>
 
       {/* Message Input Bar */}
@@ -234,14 +242,14 @@ export default function ChatClient({
       >
         <div className="flex items-end gap-2">
           <textarea
+            ref={textareaRef}
             rows={2}
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={`Message ${partnerName.split(" ")[0]}... (Press Enter to send, Shift+Enter for new line)`}
             maxLength={500}
-            disabled={sending}
-            className="flex-1 text-xs p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none placeholder:text-slate-400 disabled:opacity-60"
+            className="flex-1 text-xs p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none placeholder:text-slate-400"
           />
 
           <Button
