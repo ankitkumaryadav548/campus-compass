@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { connectDB } from "@/lib/mongodb";
 import BuddyMatch from "@/models/BuddyMatch";
+import User from "@/models/User";
 import { markMessagesRead } from "@/lib/messages";
 import { touchUserPresence } from "@/lib/presence";
 import { markMatchMessagesRead } from "@/lib/notifications";
@@ -66,7 +67,20 @@ export async function POST(request, { params }) {
 
     const requesterId = (match.requesterId || match.studentId)?.toString();
     const recipientId = (match.recipientId || match.buddyId)?.toString();
-    const isParticipant = requesterId === userId || recipientId === userId;
+    let effectiveUserId = userId;
+    let isParticipant = requesterId === effectiveUserId || recipientId === effectiveUserId;
+
+    if (!isParticipant && session.user?.email) {
+      const dbUser = await User.findOne({ email: session.user.email }).select("_id").lean();
+      if (dbUser) {
+        const freshId = dbUser._id.toString();
+        if (requesterId === freshId || recipientId === freshId) {
+          effectiveUserId = freshId;
+          isParticipant = true;
+        }
+      }
+    }
+
     if (!isParticipant) {
       return NextResponse.json(
         { error: "You are not authorized to access this conversation." },
@@ -82,17 +96,17 @@ export async function POST(request, { params }) {
     }
 
     // Non-blocking throttled presence touch
-    touchUserPresence(userId).catch((e) => console.error("touchUserPresence error:", e));
+    touchUserPresence(effectiveUserId).catch((e) => console.error("touchUserPresence error:", e));
 
     const markedCount = await markMessagesRead({
       matchId,
-      userId,
+      userId: effectiveUserId,
       upTo: upToDate,
     });
 
     // Clear unread message notifications for this match
     try {
-      await markMatchMessagesRead(userId, matchId);
+      await markMatchMessagesRead(effectiveUserId, matchId);
     } catch (notifErr) {
       console.error("markMatchMessagesRead failed:", notifErr);
     }

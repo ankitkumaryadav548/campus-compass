@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { connectDB } from "@/lib/mongodb";
 import BuddyMatch from "@/models/BuddyMatch";
+import User from "@/models/User";
 import { getMessagesForMatch, sendMessage } from "@/lib/messages";
 import { touchUserPresence, getPartnerPresenceForMatch } from "@/lib/presence";
 import { notifyNewMessage } from "@/lib/notifications";
@@ -43,7 +44,7 @@ export async function GET(request, { params }) {
     );
   }
 
-  const userId = (session.user.id || session.user._id).toString();
+  let userId = (session.user.id || session.user._id).toString();
 
   try {
     await connectDB();
@@ -58,7 +59,20 @@ export async function GET(request, { params }) {
 
     const requesterId = (match.requesterId || match.studentId)?.toString();
     const recipientId = (match.recipientId || match.buddyId)?.toString();
-    const isParticipant = requesterId === userId || recipientId === userId;
+    let effectiveUserId = userId;
+    let isParticipant = requesterId === effectiveUserId || recipientId === effectiveUserId;
+
+    if (!isParticipant && session.user?.email) {
+      const dbUser = await User.findOne({ email: session.user.email }).select("_id").lean();
+      if (dbUser) {
+        const freshId = dbUser._id.toString();
+        if (requesterId === freshId || recipientId === freshId) {
+          effectiveUserId = freshId;
+          isParticipant = true;
+        }
+      }
+    }
+
     if (!isParticipant) {
       return NextResponse.json(
         { error: "You are not authorized to access this conversation." },
@@ -74,7 +88,7 @@ export async function GET(request, { params }) {
     }
 
     // Non-blocking throttled presence touch for the viewer
-    touchUserPresence(userId).catch((e) => console.error("touchUserPresence error:", e));
+    touchUserPresence(effectiveUserId).catch((e) => console.error("touchUserPresence error:", e));
 
     const { searchParams } = new URL(request.url);
     const before = searchParams.get("before");
@@ -83,11 +97,11 @@ export async function GET(request, { params }) {
     const [messagesResult, partnerPresence] = await Promise.all([
       getMessagesForMatch({
         matchId,
-        userId,
+        userId: effectiveUserId,
         before,
         after,
       }),
-      getPartnerPresenceForMatch(matchId, userId),
+      getPartnerPresenceForMatch(matchId, effectiveUserId),
     ]);
 
     return NextResponse.json({
@@ -123,13 +137,6 @@ export async function POST(request, { params }) {
   }
 
   const userId = (session.user.id || session.user._id).toString();
-
-  if (!checkMessageRateLimit(userId)) {
-    return NextResponse.json(
-      { error: "You are sending messages too quickly. Please slow down." },
-      { status: 429 }
-    );
-  }
 
   let body;
   try {
@@ -170,7 +177,20 @@ export async function POST(request, { params }) {
 
     const requesterId = (match.requesterId || match.studentId)?.toString();
     const recipientId = (match.recipientId || match.buddyId)?.toString();
-    const isParticipant = requesterId === userId || recipientId === userId;
+    let effectiveUserId = userId;
+    let isParticipant = requesterId === effectiveUserId || recipientId === effectiveUserId;
+
+    if (!isParticipant && session.user?.email) {
+      const dbUser = await User.findOne({ email: session.user.email }).select("_id").lean();
+      if (dbUser) {
+        const freshId = dbUser._id.toString();
+        if (requesterId === freshId || recipientId === freshId) {
+          effectiveUserId = freshId;
+          isParticipant = true;
+        }
+      }
+    }
+
     if (!isParticipant) {
       return NextResponse.json(
         { error: "You are not authorized to post to this conversation." },
@@ -185,22 +205,29 @@ export async function POST(request, { params }) {
       );
     }
 
+    if (!checkMessageRateLimit(effectiveUserId)) {
+      return NextResponse.json(
+        { error: "You are sending messages too quickly. Please slow down." },
+        { status: 429 }
+      );
+    }
+
     // The other participant is the message recipient
-    const otherParticipantId = requesterId === userId ? recipientId : requesterId;
+    const otherParticipantId = requesterId === effectiveUserId ? recipientId : requesterId;
 
     // Non-blocking throttled presence touch for the sender
-    touchUserPresence(userId).catch((e) => console.error("touchUserPresence error:", e));
+    touchUserPresence(effectiveUserId).catch((e) => console.error("touchUserPresence error:", e));
 
     const savedMessage = await sendMessage({
       matchId,
-      senderId: userId,
+      senderId: effectiveUserId,
       recipientId: otherParticipantId,
       text: trimmedText,
       clientId: typeof clientId === "string" ? clientId : null,
     });
 
     try {
-      await notifyNewMessage(match, userId);
+      await notifyNewMessage(match, effectiveUserId);
     } catch (notifErr) {
       console.error("notifyNewMessage failed:", notifErr);
     }
