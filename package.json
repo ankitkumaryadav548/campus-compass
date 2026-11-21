@@ -9,6 +9,8 @@
     "lint": "next lint",
     "seed": "node --env-file=.env.local scripts/seed.js",
     "migrate:buddy": "node --env-file=.env.local scripts/migrate-buddy-fields.js",
+    "migrate:messages": "node --env-file=.env.local scripts/migrate-message-fields.js",
+    "test:chatdates": "node scripts/test-chat-dates.js",
     "test:personalization": "node --env-file=.env.local scripts/test-personalization.js"
   },
   "dependencies": {

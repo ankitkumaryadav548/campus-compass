@@ -7,25 +7,31 @@ const { Schema } = mongoose;
 
 const MessageSchema = new Schema(
   {
-    matchId:   { type: Schema.Types.ObjectId, ref: "BuddyMatch", required: true },
-    senderId:  { type: Schema.Types.ObjectId, ref: "User", required: true },
-    text:      {
+    matchId:     { type: Schema.Types.ObjectId, ref: "BuddyMatch", required: true },
+    senderId:    { type: Schema.Types.ObjectId, ref: "User", required: true },
+    recipientId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    clientId:    { type: String, default: null },
+    text:        {
       type: String,
       required: true,
       trim: true,
       minLength: 1,
       maxLength: 500,
     },
-    createdAt: { type: Date, default: Date.now },
-    readAt:    { type: Date, default: null },
+    readAt:      { type: Date, default: null },
   },
-  { timestamps: false }
+  { timestamps: true }
 );
 
-// ── Compound index for fast chronological conversation retrieval ───────────
+// ── Indexes ────────────────────────────────────────────────────────────────
 MessageSchema.index({ matchId: 1, createdAt: 1 });
+MessageSchema.index({ matchId: 1, updatedAt: 1 });
+MessageSchema.index({ recipientId: 1, readAt: 1 });
+// Deduplication: prevent retried requests with same clientId from creating duplicate records
+MessageSchema.index({ senderId: 1, clientId: 1 }, { unique: true, sparse: true });
 
 const Message =
   mongoose.models.Message ||
   mongoose.model("Message", MessageSchema);
+
 export default Message;

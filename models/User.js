@@ -27,6 +27,9 @@ const UserSchema = new Schema(
     openToConnect:   { type: Boolean, default: true },
     bio:             { type: String, trim: true, default: "" },
 
+    // Online presence tracking
+    lastSeenAt:      { type: Date, default: null },
+
     // Onboarding state
     onboardingDone:  { type: Boolean, default: false },
 

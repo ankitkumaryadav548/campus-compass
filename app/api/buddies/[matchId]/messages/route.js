@@ -4,8 +4,9 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { connectDB } from "@/lib/mongodb";
 import BuddyMatch from "@/models/BuddyMatch";
-import Message from "@/models/Message";
-import { notifyNewMessage, markMatchMessagesRead } from "@/lib/notifications";
+import { getMessagesForMatch, sendMessage } from "@/lib/messages";
+import { touchUserPresence, getPartnerPresenceForMatch } from "@/lib/presence";
+import { notifyNewMessage } from "@/lib/notifications";
 
 // Rate limiting: max 30 messages per 5 minutes per user
 const userMessageTimestamps = new Map();
@@ -67,54 +68,33 @@ export async function GET(request, { params }) {
 
     if (match.status !== "accepted") {
       return NextResponse.json(
-        { error: "Chat is only available for accepted buddy connections." },
+        { error: "Chat is only available for accepted connections." },
         { status: 403 }
       );
     }
 
+    // Non-blocking throttled presence touch for the viewer
+    touchUserPresence(userId).catch((e) => console.error("touchUserPresence error:", e));
+
     const { searchParams } = new URL(request.url);
+    const before = searchParams.get("before");
     const after = searchParams.get("after");
 
-    const messageQuery = { matchId };
-    if (after) {
-      const parsedDate = new Date(after);
-      if (!isNaN(parsedDate.getTime())) {
-        messageQuery.createdAt = { $gt: parsedDate };
-      }
-    }
-
-    const messages = await Message.find(messageQuery)
-      .sort({ createdAt: 1 })
-      .lean();
-
-    // Mark unread messages sent by the other person as read
-    const unreadMessageIds = messages
-      .filter((m) => m.senderId.toString() !== userId && !m.readAt)
-      .map((m) => m._id);
-
-    if (unreadMessageIds.length > 0) {
-      await Message.updateMany(
-        { _id: { $in: unreadMessageIds } },
-        { $set: { readAt: new Date() } }
-      );
-    }
-
-    try {
-      await markMatchMessagesRead(userId, matchId);
-    } catch (notifErr) {
-      console.error("markMatchMessagesRead failed:", notifErr);
-    }
+    const [messagesResult, partnerPresence] = await Promise.all([
+      getMessagesForMatch({
+        matchId,
+        userId,
+        before,
+        after,
+      }),
+      getPartnerPresenceForMatch(matchId, userId),
+    ]);
 
     return NextResponse.json({
-      messages: messages.map((m) => ({
-        _id: m._id.toString(),
-        matchId: m.matchId.toString(),
-        senderId: m.senderId.toString(),
-        isMine: m.senderId.toString() === userId,
-        text: m.text,
-        createdAt: m.createdAt.toISOString(),
-        readAt: m.readAt ? m.readAt.toISOString() : null,
-      })),
+      messages: messagesResult.messages,
+      hasMore: messagesResult.hasMore,
+      firstUnreadId: messagesResult.firstUnreadId,
+      partnerPresence,
     });
   } catch (err) {
     console.error("GET /api/buddies/[matchId]/messages:", err);
@@ -161,7 +141,7 @@ export async function POST(request, { params }) {
     );
   }
 
-  const { text } = body;
+  const { text, clientId } = body;
   if (typeof text !== "string") {
     return NextResponse.json(
       { error: "Message text is required." },
@@ -205,11 +185,18 @@ export async function POST(request, { params }) {
       );
     }
 
-    const message = await Message.create({
+    // The other participant is the message recipient
+    const otherParticipantId = requesterId === userId ? recipientId : requesterId;
+
+    // Non-blocking throttled presence touch for the sender
+    touchUserPresence(userId).catch((e) => console.error("touchUserPresence error:", e));
+
+    const savedMessage = await sendMessage({
       matchId,
       senderId: userId,
+      recipientId: otherParticipantId,
       text: trimmedText,
-      createdAt: new Date(),
+      clientId: typeof clientId === "string" ? clientId : null,
     });
 
     try {
@@ -219,17 +206,7 @@ export async function POST(request, { params }) {
     }
 
     return NextResponse.json(
-      {
-        message: {
-          _id: message._id.toString(),
-          matchId: message.matchId.toString(),
-          senderId: message.senderId.toString(),
-          isMine: true,
-          text: message.text,
-          createdAt: message.createdAt.toISOString(),
-          readAt: null,
-        },
-      },
+      { message: savedMessage },
       { status: 201 }
     );
   } catch (err) {

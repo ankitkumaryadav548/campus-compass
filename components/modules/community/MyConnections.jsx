@@ -19,6 +19,7 @@ import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import EmptyState from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
+import ChatListItem from "./chat/ChatListItem";
 
 function getInitials(name) {
   if (!name) return "CC";
@@ -266,64 +267,20 @@ export default function MyConnections({
             No active connections yet.
           </p>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {acceptedMatches.map((m) => {
-              const partnerName =
-                m.partner?.name?.replace(/^\[SAMPLE\]\s*/i, "").replace(" (Sample)", "") || "Connection";
-              const hasUnread = m.unreadCount > 0;
-
-              return (
-                <Card key={m._id} className="p-4 flex flex-col justify-between hover:shadow-md transition-shadow">
-                  <div>
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-10 h-10 rounded-full bg-gradient-primary flex items-center justify-center text-white text-xs font-bold shrink-0 shadow-sm">
-                          {getInitials(partnerName)}
-                        </div>
-                        <div className="min-w-0">
-                          <h3 className="text-sm font-bold text-slate-900 dark:text-white truncate">
-                            {partnerName}
-                          </h3>
-                          <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
-                            <Globe size={10} />
-                            {m.partner?.country}
-                            {m.partner?.isSenior && " (Senior)"}
-                          </p>
-                        </div>
-                      </div>
-
-                      {hasUnread && (
-                        <span className="w-2.5 h-2.5 rounded-full bg-primary-600 animate-pulse shrink-0" title="Unread messages" />
-                      )}
-                    </div>
-
-                    {/* Last message preview */}
-                    {m.lastMessage ? (
-                      <div className="bg-slate-50 dark:bg-slate-900 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-300 mb-3 line-clamp-2 leading-relaxed">
-                        <span className="font-semibold text-slate-700 dark:text-slate-200">
-                          {m.lastMessage.isMine ? "You: " : `${partnerName.split(" ")[0]}: `}
-                        </span>
-                        {m.lastMessage.text}
-                      </div>
-                    ) : (
-                      <p className="text-xs text-slate-400 dark:text-slate-500 italic mb-3">
-                        No messages yet. Say hello!
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex justify-end">
-                    <Link
-                      href={`/community/chat/${m._id}`}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-primary-600 text-white text-xs font-semibold hover:bg-primary-700 transition-colors shadow-sm min-h-[36px]"
-                    >
-                      <MessageSquare size={13} aria-hidden="true" />
-                      Open chat {hasUnread && `(${m.unreadCount})`}
-                    </Link>
-                  </div>
-                </Card>
-              );
-            })}
+          <div className="space-y-1.5 bg-white dark:bg-slate-900 p-2.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+            {[...acceptedMatches]
+              .sort((a, b) => {
+                const timeA = a.lastMessage?.createdAt ? new Date(a.lastMessage.createdAt).getTime() : 0;
+                const timeB = b.lastMessage?.createdAt ? new Date(b.lastMessage.createdAt).getTime() : 0;
+                return timeB - timeA;
+              })
+              .map((m) => (
+                <ChatListItem
+                  key={m._id}
+                  match={m}
+                  isSelected={false}
+                />
+              ))}
           </div>
         )}
       </div>
