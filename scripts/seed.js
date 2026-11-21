@@ -911,7 +911,7 @@ async function seed() {
       recipientId: moses._id,
       actorId:     linh._id,
       type:        "buddy_request",
-      matchId:     null,
+      matchId:     linhMosesMatch ? linhMosesMatch._id : null,
       count:       1,
       readAt:      null,
       isSample:    true,
