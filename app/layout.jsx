@@ -43,7 +43,7 @@ const themeScript = `
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" className={inter.variable} suppressHydrationWarning>
+    <html lang="en" className={inter.variable} data-scroll-behavior="smooth" suppressHydrationWarning>
       <head>
         {/* Prevent dark-mode flash */}
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />

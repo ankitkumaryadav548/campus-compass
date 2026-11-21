@@ -10,6 +10,7 @@ import { MessageSquare, Users } from "lucide-react";
 import { requireUser } from "@/lib/session";
 import { connectDB } from "@/lib/mongodb";
 import BuddyMatch from "@/models/BuddyMatch";
+import User from "@/models/User";
 import { getMessagesForMatch } from "@/lib/messages";
 import { getUserPresence } from "@/lib/presence";
 import { getMyMatches } from "@/lib/community";
@@ -31,65 +32,70 @@ export default async function CommunityChatPage({ params }) {
 
   const user = await requireUser(`/community/chat/${matchId}`);
   const userId = (user.id || user._id).toString();
-  const userObjId = mongoose.Types.ObjectId.isValid(userId)
-    ? new mongoose.Types.ObjectId(userId)
-    : userId;
 
   await connectDB();
 
-  // Scope match query to requesterId or recipientId matching current session user
-  const match = await BuddyMatch.findOne({
-    _id: matchId,
-    $or: [{ requesterId: userObjId }, { recipientId: userObjId }],
-  })
-    .populate("requesterId", "name country regionGroup languages bio isSenior lastSeenAt")
-    .populate("recipientId", "name country regionGroup languages bio isSenior lastSeenAt")
-    .lean();
-
-  if (!match) {
+  // First fetch the raw match to guarantee stored IDs are never nullified by populate
+  const rawMatch = await BuddyMatch.findById(matchId).lean();
+  if (!rawMatch) {
     notFound();
   }
 
-  if (match.status !== "accepted") {
-    redirect("/community?tab=matches");
-  }
+  const rawReqId = (rawMatch.requesterId || rawMatch.studentId)?.toString();
+  const rawRecId = (rawMatch.recipientId || rawMatch.buddyId)?.toString();
 
-  const reqIdStr = (match.requesterId?._id || match.requesterId)?.toString();
-  const recIdStr = (match.recipientId?._id || match.recipientId)?.toString();
-  const isRequester = reqIdStr === userId;
-  const isRecipient = recIdStr === userId;
+  let isRequester = rawReqId === userId;
+  let isRecipient = rawRecId === userId;
+
+  // If session ID does not match directly, check if session user's email matches either participant
+  if (!isRequester && !isRecipient && user.email) {
+    const dbUser = await User.findOne({ email: user.email }).select("_id").lean();
+    if (dbUser) {
+      const currentDbId = dbUser._id.toString();
+      if (rawReqId === currentDbId) isRequester = true;
+      if (rawRecId === currentDbId) isRecipient = true;
+    }
+  }
 
   if (!isRequester && !isRecipient) {
     notFound();
   }
 
-  const partnerDoc = isRequester ? match.recipientId : match.requesterId;
-  if (!partnerDoc || !partnerDoc._id) {
-    notFound();
+  if (rawMatch.status !== "accepted") {
+    redirect("/community?tab=matches");
   }
 
+  const partnerId = isRequester ? rawRecId : rawReqId;
+  const partnerDoc = await User.findById(partnerId)
+    .select("name country regionGroup languages bio isSenior lastSeenAt")
+    .lean();
+
+  const partnerPresence = partnerDoc?._id
+    ? await getUserPresence(partnerDoc._id)
+    : { online: false, lastSeenAt: null };
+
   // Concurrently fetch initial messages, partner presence, and all user connections for desktop sidebar
-  const [messagesResult, partnerPresence, allMatches] = await Promise.all([
+  const [messagesResult, allMatches] = await Promise.all([
     getMessagesForMatch({
       matchId,
       userId,
       limit: 50,
     }),
-    getUserPresence(partnerDoc._id),
     getMyMatches(user),
   ]);
 
   const acceptedConnections = allMatches.filter((m) => m.status === "accepted");
 
+  const partnerName = partnerDoc?.name?.replace(/^\[SAMPLE\]\s*/i, "").replace(" (Sample)", "") || "Connection";
   const serializedPartner = {
-    _id: partnerDoc._id.toString(),
-    name: partnerDoc.name,
-    country: partnerDoc.country || "",
-    regionGroup: partnerDoc.regionGroup || "",
-    languages: partnerDoc.languages || [],
-    bio: partnerDoc.bio || "",
-    isSenior: Boolean(partnerDoc.isSenior),
-    lastSeenAt: partnerDoc.lastSeenAt ? new Date(partnerDoc.lastSeenAt).toISOString() : null,
+    _id: partnerId,
+    name: partnerName,
+    country: partnerDoc?.country || "",
+    regionGroup: partnerDoc?.regionGroup || "",
+    languages: partnerDoc?.languages || [],
+    bio: partnerDoc?.bio || "",
+    isSenior: Boolean(partnerDoc?.isSenior),
+    lastSeenAt: partnerDoc?.lastSeenAt ? new Date(partnerDoc.lastSeenAt).toISOString() : null,
     online: partnerPresence.online,
   };
 
