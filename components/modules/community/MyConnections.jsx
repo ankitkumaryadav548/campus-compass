@@ -95,7 +95,7 @@ export default function MyConnections({
       <EmptyState
         icon={<MessageSquare size={32} />}
         title="No chats yet"
-        description="Say hi to someone from your country in People."
+        description="Invite someone from your country in People."
         action={
           <Button
             variant="primary"

@@ -58,8 +58,8 @@ LLM_API_KEY
 | 4 | **Checklist** | Arrival documentation tracker with deadlines and progress bar |
 | 5 | **Guides** | SIM and Bank step-by-step guides with required documents, provider list, tips, and per-user step progress |
 | 6 | **Food Finder** | Map and list, filter by cuisine, diet (halal, vegetarian, etc.), country tags, student reviews |
-| 7 | **Community** | Direct chat messaging between students, Block and Report safety tools, campus events with RSVP |
-| 7.5 | **Notifications** | In-app notification bell, badge, dropdown, full history page, triggered by new chat messages |
+| 7 | **Community** | Student invitations, WhatsApp-style 1-to-1 chat after accepted invitation, Block and Report safety tools, campus mixer events with RSVP |
+| 7.5 | **Notifications** | In-app notification bell, badge, dropdown, full history page, triggered by new chat messages and invitations |
 | 8 | **Language Help** | Common phrases and campus glossary |
 | 9 | **Chatbot** | Answers using the student's profile + matching guides from DB |
 | 10 | **Admin Panel** | Role-protected CRUD for guides, places, events, checklist items |
@@ -86,11 +86,11 @@ Show the most specific match first. If the country has no data, the app must
 still work and show regionGroup / ALL content with a friendly note.
 
 **Connection / People matching priority (seniors and peers):**
-1. Same country
+1. Same country (default view in People tab)
 2. Same language or regionGroup
 3. Any available international peer/senior open to connect
 
-Direct messaging without approval step; safety tools (Block and Report); openToConnect controls discovery in People.
+Invitation-based connection flow: student sends an invitation (optional plain text note max 150 chars); chat opens only after the recipient accepts. Limits: max 3 pending sent invitations, max 10 invitations per 24 hours. Decline cooldown: 30 days. Expiry: 14 days. Safety tools (Block and Report); openToConnect controls discovery in People.
 
 **Reusable helper:** Create ONE file `lib/personalization.js` used by every module.
 
@@ -138,7 +138,8 @@ countryTags[], address, location{lat,lng}, rating, reviews[]
 
 ### BuddyMatch
 ```
-requesterId, recipientId, pairKey, status (active|blocked), blockedBy, lastMessageAt
+requesterId, recipientId, pairKey, status (pending|active|declined|cancelled|expired|blocked),
+blockedBy, lastMessageAt, inviteNote (max 150 chars), invitedAt, respondedAt, expiresAt, cooldownUntil
 (unique index on pairKey; indexes on requesterId, recipientId, status, lastMessageAt)
 ```
 
@@ -164,8 +165,8 @@ title, description, date, region[], location, attendees[]
 
 ### Notification
 ```
-recipientId, actorId, type (new_message),
-matchId, count, preview (max 80 chars), readAt, isSample, createdAt, updatedAt
+recipientId, actorId, type (new_message|invitation_received|invitation_accepted),
+matchId, count, preview (max 85 chars), readAt, isSample, createdAt, updatedAt
 (compound index on recipientId + readAt + createdAt desc; TTL index on createdAt 60 days)
 ```
 
@@ -203,10 +204,11 @@ app/
     guides/
     places/
     buddies/
-      start/
       [matchId]/
         messages/
         read/
+    invitations/
+      [matchId]/
     reports/
     events/
     notifications/
@@ -224,6 +226,7 @@ lib/
   auth.js
   personalization.js
   community.js
+  invitations.js
   reports.js
   messages.js
   presence.js
@@ -244,6 +247,7 @@ models/
   Notification.js
 scripts/
   seed.js
+  migrate-invitations.js
   migrate-direct-chat.js
 public/
 ```

@@ -66,7 +66,7 @@ export default async function CommunityChatPage({ params }) {
   }
 
   if (rawMatch.status !== "active" && rawMatch.status !== "blocked") {
-    redirect("/community?tab=matches");
+    redirect("/community?tab=chats");
   }
 
   const partnerId = isRequester ? rawRecId : rawReqId;
@@ -89,7 +89,6 @@ export default async function CommunityChatPage({ params }) {
   ]);
 
   const activeChats = userChats.chats || [];
-  const hasReplied = messagesResult.messages.some((m) => m.senderId === userId);
 
   const partnerName =
     partnerDoc?.name?.replace(/^\[SAMPLE\]\s*/i, "").replace(" (Sample)", "") || "Connection";
@@ -151,11 +150,9 @@ export default async function CommunityChatPage({ params }) {
               initialPartnerPresence={partnerPresence}
               initialFirstUnreadId={messagesResult.firstUnreadId}
               currentUserId={userId}
-              backHref="/community?tab=matches"
+              backHref="/community?tab=chats"
               matchStatus={rawMatch.status}
               blockedBy={rawMatch.blockedBy ? rawMatch.blockedBy.toString() : null}
-              isStarter={isRequester}
-              initialHasReplied={hasReplied}
             />
           </div>
         </div>

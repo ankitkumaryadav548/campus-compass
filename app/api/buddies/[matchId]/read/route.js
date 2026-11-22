@@ -88,6 +88,13 @@ export async function POST(request, { params }) {
       );
     }
 
+    if (!["active", "blocked"].includes(match.status)) {
+      return NextResponse.json(
+        { error: "This conversation is not active." },
+        { status: 403 }
+      );
+    }
+
     // Non-blocking throttled presence touch
     touchUserPresence(effectiveUserId).catch((e) => console.error("touchUserPresence error:", e));
 

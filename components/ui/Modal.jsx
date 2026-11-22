@@ -14,7 +14,9 @@ import { motion, AnimatePresence } from "framer-motion";
  * @param {string} title       Dialog title
  * @param {string} size        sm | md | lg | xl
  */
-export default function Modal({ isOpen, onClose, title, children, size = "md", className }) {
+export default function Modal({ isOpen, open, onClose, title, children, size = "md", className }) {
+  const isModalOpen = Boolean(isOpen ?? open);
+
   // Close on ESC key
   const handleKeyDown = useCallback(
     (e) => { if (e.key === "Escape") onClose?.(); },
@@ -22,7 +24,7 @@ export default function Modal({ isOpen, onClose, title, children, size = "md", c
   );
 
   useEffect(() => {
-    if (isOpen) {
+    if (isModalOpen) {
       document.addEventListener("keydown", handleKeyDown);
       document.body.style.overflow = "hidden";
     }
@@ -30,7 +32,7 @@ export default function Modal({ isOpen, onClose, title, children, size = "md", c
       document.removeEventListener("keydown", handleKeyDown);
       document.body.style.overflow = "";
     };
-  }, [isOpen, handleKeyDown]);
+  }, [isModalOpen, handleKeyDown]);
 
   const widths = {
     sm: "max-w-sm",
@@ -41,7 +43,7 @@ export default function Modal({ isOpen, onClose, title, children, size = "md", c
 
   return (
     <AnimatePresence>
-      {isOpen && (
+      {isModalOpen && (
         <>
           {/* Backdrop */}
           <motion.div

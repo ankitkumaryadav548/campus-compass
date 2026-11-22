@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { countUnread } from "@/lib/notifications";
 import { getTotalUnreadMessagesCount } from "@/lib/messages";
+import { countPendingReceived } from "@/lib/invitations";
 import { touchUserPresence } from "@/lib/presence";
 
 export async function GET() {
@@ -20,12 +21,13 @@ export async function GET() {
     // Throttled presence update for the session user
     touchUserPresence(userId).catch((e) => console.error("touchUserPresence error:", e));
 
-    const [count, unreadMessages] = await Promise.all([
+    const [count, unreadMessages, pendingInvitations] = await Promise.all([
       countUnread(userId),
       getTotalUnreadMessagesCount(userId),
+      countPendingReceived({ id: userId }),
     ]);
 
-    return NextResponse.json({ count, unreadMessages });
+    return NextResponse.json({ count, unreadMessages, pendingInvitations });
   } catch (err) {
     console.error("GET /api/notifications/unread-count error:", err);
     return NextResponse.json(

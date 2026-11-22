@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { connectDB } from "@/lib/mongodb";
+import User from "@/models/User";
 import { getPeopleSuggestions } from "@/lib/community";
 
 export async function GET(request) {
@@ -15,6 +16,7 @@ export async function GET(request) {
   }
 
   const { searchParams } = new URL(request.url);
+  const scope = searchParams.get("scope") === "all" ? "all" : "country";
   const kind = searchParams.get("kind") || "all";
   const country = searchParams.get("country") || "";
   const search = searchParams.get("search") || "";
@@ -23,7 +25,27 @@ export async function GET(request) {
 
   try {
     await connectDB();
-    const result = await getPeopleSuggestions(session.user, {
+
+    let user = session.user;
+    if (session.user.email) {
+      const dbUser = await User.findOne({ email: session.user.email })
+        .select("_id name country regionGroup languages isSenior")
+        .lean();
+      if (dbUser) {
+        user = {
+          ...session.user,
+          id: dbUser._id.toString(),
+          _id: dbUser._id.toString(),
+          country: dbUser.country || "",
+          regionGroup: dbUser.regionGroup || "",
+          languages: dbUser.languages || [],
+          isSenior: Boolean(dbUser.isSenior),
+        };
+      }
+    }
+
+    const result = await getPeopleSuggestions(user, {
+      scope,
       kind,
       country,
       search,

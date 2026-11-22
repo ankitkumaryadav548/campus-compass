@@ -16,7 +16,7 @@ const NotificationSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ["new_message", "buddy_request", "request_accepted", "request_declined"],
+      enum: ["new_message", "invitation_received", "invitation_accepted"],
       required: true,
     },
     matchId: {
@@ -48,10 +48,7 @@ const NotificationSchema = new mongoose.Schema(
   }
 );
 
-// Compound index for fast queries: unread first or newest by recipient
 NotificationSchema.index({ recipientId: 1, readAt: 1, createdAt: -1 });
-
-// Prune notifications older than 60 days
 NotificationSchema.index(
   { createdAt: 1 },
   { expireAfterSeconds: 60 * 24 * 60 * 60 }

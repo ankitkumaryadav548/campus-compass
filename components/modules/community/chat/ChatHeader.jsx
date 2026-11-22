@@ -21,7 +21,7 @@ function getInitials(name) {
 export default function ChatHeader({
   partner,
   presence,
-  backHref = "/community?tab=matches",
+  backHref = "/community?tab=chats",
   isBlocked = false,
   canUnblock = false,
   onOpenBlockDialog,

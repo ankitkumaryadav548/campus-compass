@@ -10,6 +10,7 @@ import {
   getMyChats,
   getUpcomingEvents,
 } from "@/lib/community";
+import { getInvitations } from "@/lib/invitations";
 import { noContentNote } from "@/lib/personalization";
 import AppShell from "@/components/layout/AppShell";
 import CommunityClient from "@/components/modules/community/CommunityClient";
@@ -23,6 +24,7 @@ export default async function CommunityPage({ searchParams }) {
   const sessionUser = await requireUser("/community");
   const resolvedSearchParams = (await searchParams) || {};
 
+  const scope = resolvedSearchParams.scope === "all" ? "all" : "country";
   const kind = resolvedSearchParams.kind || "all";
   const country = resolvedSearchParams.country || "";
   const search = resolvedSearchParams.search || "";
@@ -45,12 +47,15 @@ export default async function CommunityPage({ searchParams }) {
     openToConnect: dbUser?.openToConnect !== false,
   };
 
-  const [peopleData, chatsData, events] = await Promise.all([
-    getPeopleSuggestions(currentUser, { kind, country, search }),
+  const [peopleData, chatsData, invitationsData, events] = await Promise.all([
+    getPeopleSuggestions(currentUser, { scope, kind, country, search }),
     getMyChats(currentUser),
+    getInvitations(currentUser),
     getUpcomingEvents(currentUser),
   ]);
 
+  const pendingInvitations = invitationsData.received.length;
+  const totalUnreadMessages = chatsData.chats.reduce((sum, c) => sum + (c.unreadCount || 0), 0);
   const noContentBannerText = noContentNote(currentUser);
 
   return (
@@ -64,17 +69,20 @@ export default async function CommunityPage({ searchParams }) {
             </h1>
           </div>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            Connect directly with peers and senior mentors, message students in real time, and attend campus mixer events.
+            Find students from your country, send an invitation, and start chatting once they accept.
           </p>
         </div>
 
         <CommunityClient
           peopleData={peopleData}
           chatsData={chatsData}
-          matches={[...chatsData.chats, ...chatsData.blockedChats]}
+          invitationsData={invitationsData}
           events={events}
           currentUser={currentUser}
           noContentBannerText={noContentBannerText}
+          pendingInvitations={pendingInvitations}
+          totalUnreadMessages={totalUnreadMessages}
+          initialScope={scope}
         />
       </div>
     </AppShell>

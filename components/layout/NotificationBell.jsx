@@ -24,10 +24,15 @@ export default function NotificationBell() {
   const unreadMessagesRef = useRef(0);
 
   // Broadcasts count change to Sidebar / mobile bottom navigation without a secondary loop
-  const broadcastCount = useCallback((count, unreadMessages) => {
+  const pendingInvitationsRef = useRef(0);
+
+  const broadcastCount = useCallback((count, unreadMessages, pendingInvitations) => {
     setUnreadCount(count);
     if (typeof unreadMessages === "number") {
       unreadMessagesRef.current = unreadMessages;
+    }
+    if (typeof pendingInvitations === "number") {
+      pendingInvitationsRef.current = pendingInvitations;
     }
     if (typeof window !== "undefined") {
       window.dispatchEvent(
@@ -35,6 +40,7 @@ export default function NotificationBell() {
           detail: {
             count,
             unreadMessages: unreadMessagesRef.current,
+            pendingInvitations: pendingInvitationsRef.current,
           },
         })
       );
@@ -50,7 +56,9 @@ export default function NotificationBell() {
         const count = typeof data.count === "number" ? data.count : 0;
         const unreadMessages =
           typeof data.unreadMessages === "number" ? data.unreadMessages : 0;
-        broadcastCount(count, unreadMessages);
+        const pendingInvitations =
+          typeof data.pendingInvitations === "number" ? data.pendingInvitations : 0;
+        broadcastCount(count, unreadMessages, pendingInvitations);
       }
     } catch {
       // Silently ignore polling network failures

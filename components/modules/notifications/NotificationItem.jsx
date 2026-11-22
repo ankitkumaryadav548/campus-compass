@@ -9,6 +9,8 @@ import {
   Bell,
   Check,
   RotateCcw,
+  UserPlus,
+  CheckCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatRelativeTime } from "@/lib/notificationText";
@@ -17,6 +19,10 @@ function getNotificationIcon(iconName) {
   switch (iconName) {
     case "message-circle":
       return <MessageCircle size={16} aria-hidden="true" />;
+    case "user-plus":
+      return <UserPlus size={16} aria-hidden="true" />;
+    case "check-circle":
+      return <CheckCircle size={16} aria-hidden="true" />;
     default:
       return <Bell size={16} aria-hidden="true" />;
   }
@@ -26,6 +32,10 @@ function getIconContainerStyles(type) {
   switch (type) {
     case "new_message":
       return "bg-violet-100 text-violet-600 dark:bg-violet-950/70 dark:text-violet-400";
+    case "invitation_received":
+      return "bg-blue-100 text-blue-600 dark:bg-blue-950/70 dark:text-blue-400";
+    case "invitation_accepted":
+      return "bg-emerald-100 text-emerald-600 dark:bg-emerald-950/70 dark:text-emerald-400";
     default:
       return "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400";
   }

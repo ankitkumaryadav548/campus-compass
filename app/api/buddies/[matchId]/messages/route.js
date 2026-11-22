@@ -80,6 +80,13 @@ export async function GET(request, { params }) {
       );
     }
 
+    if (!["active", "blocked"].includes(match.status)) {
+      return NextResponse.json(
+        { error: "This conversation is not active." },
+        { status: 403 }
+      );
+    }
+
     // Non-blocking throttled presence touch for the viewer
     touchUserPresence(effectiveUserId).catch((e) => console.error("touchUserPresence error:", e));
 
@@ -193,7 +200,7 @@ export async function POST(request, { params }) {
 
     if (match.status !== "active") {
       return NextResponse.json(
-        { error: "You cannot send messages in this chat." },
+        { error: "You can only send messages in an active chat." },
         { status: 403 }
       );
     }

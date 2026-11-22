@@ -15,7 +15,6 @@ const bcrypt   = require("bcryptjs");
 
 // ── Campus constants – single source of truth from lib/campus.js ───────────
 const { CAMPUS_NAME, CAMPUS_LAT, CAMPUS_LNG } = require("../lib/campus");
-const { SquareDashedKanban } = require("lucide-react");
 
 // ── MongoDB connection ─────────────────────────────────────────────────────
 const MONGODB_URI = process.env.MONGODB_URI;
@@ -134,9 +133,14 @@ const BuddyMatchSchema = new mongoose.Schema(
     requesterId:   { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     recipientId:   { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     pairKey:       { type: String, required: true },
-    status:        { type: String, enum: ["active", "blocked"], default: "active" },
+    status:        { type: String, enum: ["pending", "active", "declined", "cancelled", "expired", "blocked"], default: "pending" },
     blockedBy:     { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     lastMessageAt: { type: Date, default: null },
+    inviteNote:    { type: String, maxLength: 150, default: "" },
+    invitedAt:     { type: Date, default: null },
+    respondedAt:   { type: Date, default: null },
+    expiresAt:     { type: Date, default: null },
+    cooldownUntil: { type: Date, default: null },
   },
   { timestamps: true }
 );
@@ -192,7 +196,7 @@ const NotificationSchema = new mongoose.Schema(
   {
     recipientId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     actorId:     { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
-    type:        { type: String, enum: ["new_message"], required: true },
+    type:        { type: String, enum: ["new_message", "invitation_received", "invitation_accepted"], required: true },
     matchId:     { type: mongoose.Schema.Types.ObjectId, ref: "BuddyMatch", default: null },
     count:       { type: Number, default: 1 },
     preview:     { type: String, maxLength: 85, default: "" },
@@ -826,22 +830,54 @@ async function seed() {
   }
 
   const buddyMatchesData = [
+    // Moses and David (active chat)
     {
       requesterId:   moses._id,
       recipientId:   david._id,
       pairKey:       generatePairKey(moses._id, david._id),
       status:        "active",
       blockedBy:     null,
-      lastMessageAt: new Date(Date.now() - 1800000), // 30 mins ago
+      lastMessageAt: new Date(Date.now() - 900000),
+      invitedAt:     daysAgo(10),
+      respondedAt:   daysAgo(10),
     },
+    // Linh has sent Moses a pending invitation with a short note
+    {
+      requesterId:   linh._id,
+      recipientId:   moses._id,
+      pairKey:       generatePairKey(linh._id, moses._id),
+      status:        "pending",
+      blockedBy:     null,
+      lastMessageAt: null,
+      inviteNote:    "Hi Moses! I saw we are both international students here. Would love to connect!",
+      invitedAt:     daysAgo(1),
+      expiresAt:     daysFromNow(13),
+    },
+    // Moses has sent a pending invitation to Amina
+    {
+      requesterId:   moses._id,
+      recipientId:   amina._id,
+      pairKey:       generatePairKey(moses._id, amina._id),
+      status:        "pending",
+      blockedBy:     null,
+      lastMessageAt: null,
+      inviteNote:    "Hi Amina, would love to connect and learn more about student life here!",
+      invitedAt:     daysAgo(2),
+      expiresAt:     daysFromNow(12),
+    },
+    // One declined sample with a cooldown
     {
       requesterId:   linh._id,
       recipientId:   minhB._id,
       pairKey:       generatePairKey(linh._id, minhB._id),
-      status:        "active",
+      status:        "declined",
       blockedBy:     null,
-      lastMessageAt: daysAgo(1),
+      lastMessageAt: null,
+      invitedAt:     daysAgo(4),
+      respondedAt:   daysAgo(3),
+      cooldownUntil: daysFromNow(27),
     },
+    // Amina and Chidi (active chat)
     {
       requesterId:   amina._id,
       recipientId:   chidi._id,
@@ -849,14 +885,8 @@ async function seed() {
       status:        "active",
       blockedBy:     null,
       lastMessageAt: daysAgo(3),
-    },
-    {
-      requesterId:   linh._id,
-      recipientId:   moses._id,
-      pairKey:       generatePairKey(linh._id, moses._id),
-      status:        "active",
-      blockedBy:     null,
-      lastMessageAt: new Date(Date.now() - 3600000), // 1 hour ago
+      invitedAt:     daysAgo(5),
+      respondedAt:   daysAgo(5),
     },
   ];
 
@@ -870,6 +900,12 @@ async function seed() {
   );
   const linhMosesMatch = buddyMatches.find(
     (bm) => bm.requesterId.toString() === linh._id.toString() && bm.recipientId.toString() === moses._id.toString()
+  );
+  const mosesAminaMatch = buddyMatches.find(
+    (bm) => bm.requesterId.toString() === moses._id.toString() && bm.recipientId.toString() === amina._id.toString()
+  );
+  const aminaChidiMatch = buddyMatches.find(
+    (bm) => bm.requesterId.toString() === amina._id.toString() && bm.recipientId.toString() === chidi._id.toString()
   );
 
   const sampleMessagesData = [
@@ -927,13 +963,13 @@ async function seed() {
       createdAt:   new Date(Date.now() - 900000), // 15 mins ago
       readAt:      null,
     },
-    // 7. Linh to Moses (one unread message from Linh who started the chat)
+    // 7. Chidi to Amina (first message in chat, unread by Amina)
     {
-      matchId:     linhMosesMatch._id,
-      senderId:    linh._id,
-      recipientId: moses._id,
-      text:        "Hi Moses! I saw we are both international students here, thought I would say hello!",
-      createdAt:   new Date(Date.now() - 3600000), // 1 hour ago
+      matchId:     aminaChidiMatch._id,
+      senderId:    chidi._id,
+      recipientId: amina._id,
+      text:        "Hello Amina! Welcome to campus, let me know if you need any guidance.",
+      createdAt:   daysAgo(3),
       readAt:      null,
     },
   ];
@@ -950,14 +986,36 @@ async function seed() {
   // ── 10. SAMPLE NOTIFICATIONS ──────────────────────────────────────────
   console.log("🔔  Inserting sample notifications…");
   const sampleNotificationsData = [
-    // Unread message notification for Moses from Linh (Linh started chat, Moses has not replied)
+    // Invitation received notification for Moses from Linh
     {
       recipientId: moses._id,
       actorId:     linh._id,
-      type:        "new_message",
+      type:        "invitation_received",
       matchId:     linhMosesMatch._id,
       count:       1,
-      preview:     "Hi Moses! I saw we are both international students here, thought I would say hello!",
+      preview:     "Hi Moses! I saw we are both international students here. Would love to connect!",
+      readAt:      null,
+      isSample:    true,
+    },
+    // Invitation received notification for Amina from Moses
+    {
+      recipientId: amina._id,
+      actorId:     moses._id,
+      type:        "invitation_received",
+      matchId:     mosesAminaMatch._id,
+      count:       1,
+      preview:     "Hi Amina, would love to connect and learn more about student life here!",
+      readAt:      null,
+      isSample:    true,
+    },
+    // New message notification for Amina from Chidi
+    {
+      recipientId: amina._id,
+      actorId:     chidi._id,
+      type:        "new_message",
+      matchId:     aminaChidiMatch._id,
+      count:       1,
+      preview:     "Hello Amina! Welcome to campus, let me know if you need any guidance.",
       readAt:      null,
       isSample:    true,
     },

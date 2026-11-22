@@ -96,6 +96,7 @@ export default function Sidebar() {
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [unreadMessages, setUnreadMessages] = useState(0);
+  const [pendingInvitations, setPendingInvitations] = useState(0);
 
   // Listen for broadcasted notification unread count and unread messages updates
   useEffect(() => {
@@ -105,6 +106,9 @@ export default function Sidebar() {
       }
       if (typeof e.detail?.unreadMessages === "number") {
         setUnreadMessages(e.detail.unreadMessages);
+      }
+      if (typeof e.detail?.pendingInvitations === "number") {
+        setPendingInvitations(e.detail.pendingInvitations);
       }
     };
 
@@ -151,7 +155,7 @@ export default function Sidebar() {
               <NavItem
                 key={item.href}
                 {...item}
-                hasBadge={item.label === "Community" && unreadMessages > 0}
+                hasBadge={item.label === "Community" && (unreadMessages > 0 || pendingInvitations > 0)}
               />
             ))}
           </nav>
@@ -228,10 +232,10 @@ export default function Sidebar() {
         >
           <MoreHorizontal size={19} aria-hidden="true" />
           <span className="text-[10px]">More</span>
-          {unreadMessages > 0 && (
+          {(unreadMessages > 0 || pendingInvitations > 0) && (
             <span
               className="absolute top-2 right-2 w-2 h-2 rounded-full bg-danger-500"
-              aria-label="New messages"
+              aria-label="New messages or invitations"
             />
           )}
         </button>
@@ -264,7 +268,7 @@ export default function Sidebar() {
             <div className="grid grid-cols-1 gap-2">
               {moreItems.map(({ href, icon: Icon, label, alert }) => {
                 const active = checkIsActive(pathname, href);
-                const hasDot = label === "Community" && unreadMessages > 0;
+                const hasDot = label === "Community" && (unreadMessages > 0 || pendingInvitations > 0);
                 return (
                   <Link
                     key={href}

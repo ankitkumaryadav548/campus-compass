@@ -9,9 +9,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   ChevronDown,
   ShieldAlert,
-  X,
   Loader2,
-  Sparkles,
   Flag,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -35,11 +33,9 @@ export default function ChatWindow({
   initialPartnerPresence = null,
   initialFirstUnreadId = null,
   currentUserId,
-  backHref = "/community?tab=matches",
+  backHref = "/community?tab=chats",
   matchStatus = "active",
   blockedBy = null,
-  isStarter = true,
-  initialHasReplied = false,
 }) {
   const toast = useToast();
 
@@ -60,12 +56,6 @@ export default function ChatWindow({
   // Safety & Block states
   const [chatStatus, setChatStatus] = useState(matchStatus);
   const [chatBlockedBy, setChatBlockedBy] = useState(blockedBy);
-
-  // Track if current user has replied in this chat
-  const [hasReplied, setHasReplied] = useState(
-    initialHasReplied || initialMessages.some((m) => m.senderId === currentUserId)
-  );
-  const [bannerDismissed, setBannerDismissed] = useState(false);
 
   // Dialog states
   const [blockModalOpen, setBlockModalOpen] = useState(false);
@@ -338,7 +328,6 @@ export default function ChatWindow({
 
       setMessages((prev) => [...prev, optimisticMessage]);
       setText("");
-      setHasReplied(true);
       setTimeout(() => scrollToBottom(true), 50);
     } else {
       setMessages((prev) =>
@@ -469,10 +458,6 @@ export default function ChatWindow({
   const isBlocked = chatStatus === "blocked";
   const isBlocker = isBlocked && chatBlockedBy === currentUserId;
 
-  // Show "started this chat" banner if other person started and current user has not sent any message yet
-  const showFirstMessageBanner =
-    !isStarter && !hasReplied && !bannerDismissed && chatStatus === "active";
-
   return (
     <div className="flex flex-col h-[82vh] min-h-[520px] max-h-[820px] rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-card overflow-hidden relative">
       {/* Accessible live region */}
@@ -491,42 +476,6 @@ export default function ChatWindow({
         onOpenReportDialog={() => setReportModalOpen(true)}
         onUnblock={handleUnblock}
       />
-
-      {/* First Message Banner (shown when other person started chat and current user hasn't replied yet) */}
-      {showFirstMessageBanner && (
-        <div className="mx-3 my-2 p-3 rounded-xl border border-primary-200 dark:border-primary-800 bg-primary-50/90 dark:bg-primary-950/40 text-xs text-slate-800 dark:text-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-xs shrink-0 animate-in fade-in-50">
-          <div className="flex items-center gap-2">
-            <Sparkles size={15} className="text-primary-600 dark:text-primary-400 shrink-0" aria-hidden="true" />
-            <span>
-              <strong>{partnerName}</strong> started this chat. You can reply, block or report.
-            </span>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={() => setBlockModalOpen(true)}
-              className="px-2.5 py-1 rounded-lg text-[11px] font-semibold text-danger-600 dark:text-danger-400 hover:bg-danger-50 dark:hover:bg-danger-950/60 min-h-[36px]"
-            >
-              Block
-            </button>
-            <button
-              type="button"
-              onClick={() => setReportModalOpen(true)}
-              className="px-2.5 py-1 rounded-lg text-[11px] font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 min-h-[36px]"
-            >
-              Report
-            </button>
-            <button
-              type="button"
-              onClick={() => setBannerDismissed(true)}
-              className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg"
-              aria-label="Dismiss banner"
-            >
-              <X size={14} />
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Scrollable Conversation History Area */}
       <div
