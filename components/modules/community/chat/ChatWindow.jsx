@@ -185,20 +185,49 @@ export default function ChatWindow({
         let latestIncomingDate = null;
 
         setMessages((prev) => {
-          const messageMap = new Map(prev.map((m) => [m.id || m.clientId, m]));
+          const nextList = [...prev];
+
           for (const incoming of data.messages) {
-            const key = incoming.id || incoming.clientId;
-            if (!messageMap.has(key)) {
+            const incomingSavedId = (incoming._id || incoming.id)?.toString();
+            const incomingClientId = incoming.clientId;
+
+            // Find existing message by saved ID or by clientId (replaces pending/failed)
+            let existingIndex = -1;
+            if (incomingSavedId) {
+              existingIndex = nextList.findIndex(
+                (m) =>
+                  ((m._id || m.id)?.toString() === incomingSavedId) ||
+                  (incomingClientId && m.clientId === incomingClientId)
+              );
+            } else if (incomingClientId) {
+              existingIndex = nextList.findIndex((m) => m.clientId === incomingClientId);
+            }
+
+            if (existingIndex !== -1) {
+              // Update in place (replaces pending/failed message with confirmed saved message, or updates read status)
+              nextList[existingIndex] = {
+                ...nextList[existingIndex],
+                ...incoming,
+                id: incomingSavedId || nextList[existingIndex].id,
+                _id: incomingSavedId || nextList[existingIndex]._id,
+              };
+            } else {
               if (incoming.senderId !== currentUserId) {
                 hasNewIncoming = true;
                 latestIncomingDate = incoming.createdAt;
               }
+              nextList.push(incoming);
             }
-            messageMap.set(key, incoming);
           }
-          return Array.from(messageMap.values()).sort(
-            (a, b) => new Date(a.createdAt) - new Date(b.createdAt)
-          );
+
+          return nextList.sort((a, b) => {
+            const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+            const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+            if (timeA !== timeB) return timeA - timeB;
+            const keyA = (a._id || a.id || a.clientId || "").toString();
+            const keyB = (b._id || b.id || b.clientId || "").toString();
+            return keyA.localeCompare(keyB);
+          });
         });
 
         // Announce for accessibility
@@ -537,48 +566,52 @@ export default function ChatWindow({
 
               {/* Message Group */}
               {group.messages.map((msg, index) => {
-                const isMine = msg.senderId === currentUserId;
-                const prev = group.messages[index - 1];
-                const next = group.messages[index + 1];
+                  const isMine = msg.senderId === currentUserId;
+                  const prev = group.messages[index - 1];
+                  const next = group.messages[index + 1];
 
-                const isSameSenderAsPrev = prev && prev.senderId === msg.senderId;
-                const timeDiffPrev = prev
-                  ? Math.abs(new Date(msg.createdAt) - new Date(prev.createdAt))
-                  : Infinity;
-                const isFirstInGroup = !isSameSenderAsPrev || timeDiffPrev > 5 * 60 * 1000;
+                  const isSameSenderAsPrev = prev && prev.senderId === msg.senderId;
+                  const timeDiffPrev = prev
+                    ? Math.abs(new Date(msg.createdAt) - new Date(prev.createdAt))
+                    : Infinity;
+                  const isFirstInGroup = !isSameSenderAsPrev || timeDiffPrev > 5 * 60 * 1000;
 
-                const isSameSenderAsNext = next && next.senderId === msg.senderId;
-                const timeDiffNext = next
-                  ? Math.abs(new Date(next.createdAt) - new Date(msg.createdAt))
-                  : Infinity;
-                const isLastInGroup = !isSameSenderAsNext || timeDiffNext > 5 * 60 * 1000;
+                  const isSameSenderAsNext = next && next.senderId === msg.senderId;
+                  const timeDiffNext = next
+                    ? Math.abs(new Date(next.createdAt) - new Date(msg.createdAt))
+                    : Infinity;
+                  const isLastInGroup = !isSameSenderAsNext || timeDiffNext > 5 * 60 * 1000;
 
-                const isFirstUnread = msg.id === firstUnreadId;
+                  const messageId = (msg._id || msg.id)?.toString();
+                  const isFirstUnread = Boolean(
+                    firstUnreadId && (messageId === firstUnreadId || msg.id === firstUnreadId)
+                  );
+                  const messageKey = messageId || msg.clientId;
 
-                return (
-                  <div key={msg.id || msg.clientId}>
-                    {/* Unread Messages Pill Divider */}
-                    {isFirstUnread && (
-                      <div
-                        ref={unreadDividerRef}
-                        className="flex justify-center my-3 select-none"
-                      >
-                        <span className="px-3 py-1 rounded-full text-[11px] font-bold text-white bg-emerald-600 dark:bg-emerald-500 shadow-sm">
-                          Unread messages below
-                        </span>
-                      </div>
-                    )}
+                  return (
+                    <div key={messageKey}>
+                      {/* Unread Messages Pill Divider */}
+                      {isFirstUnread && (
+                        <div
+                          ref={unreadDividerRef}
+                          className="flex justify-center my-3 select-none"
+                        >
+                          <span className="px-3 py-1 rounded-full text-[11px] font-bold text-white bg-emerald-600 dark:bg-emerald-500 shadow-sm">
+                            Unread messages below
+                          </span>
+                        </div>
+                      )}
 
-                    <MessageBubble
-                      message={msg}
-                      isMine={isMine}
-                      isFirstInGroup={isFirstInGroup}
-                      isLastInGroup={isLastInGroup}
-                      onRetry={handleRetry}
-                    />
-                  </div>
-                );
-              })}
+                      <MessageBubble
+                        message={msg}
+                        isMine={isMine}
+                        isFirstInGroup={isFirstInGroup}
+                        isLastInGroup={isLastInGroup}
+                        onRetry={handleRetry}
+                      />
+                    </div>
+                  );
+                })}
             </div>
           ))
         )}

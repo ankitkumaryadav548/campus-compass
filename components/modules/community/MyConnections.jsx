@@ -120,7 +120,7 @@ export default function MyConnections({
         ) : (
           chats.map((chat) => (
             <ChatListItem
-              key={chat._id}
+              key={(chat._id || chat.id)?.toString()}
               match={chat}
               currentUserId={currentUserId}
             />
@@ -160,7 +160,7 @@ export default function MyConnections({
 
                 return (
                   <div
-                    key={chat._id}
+                    key={(chat._id || chat.id)?.toString()}
                     className="flex items-center justify-between gap-3 p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors min-h-[52px]"
                   >
                     <div className="flex items-center gap-3 min-w-0">

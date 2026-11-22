@@ -132,7 +132,7 @@ export default async function CommunityChatPage({ params }) {
               ) : (
                 activeChats.map((conn) => (
                   <ChatListItem
-                    key={conn._id}
+                    key={(conn._id || conn.id)?.toString()}
                     match={conn}
                     isSelected={conn._id === matchId}
                     currentUserId={userId}

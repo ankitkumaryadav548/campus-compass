@@ -66,18 +66,21 @@ assert.equal(
 
 // 7. Group by Day
 const sampleMessages = [
-  { _id: "1", text: "Old msg", createdAt: oldMsg },
-  { _id: "2", text: "Yesterday msg 1", createdAt: yesterdayMsg },
-  { _id: "3", text: "Yesterday msg 2", createdAt: new Date(2026, 10, 17, 22, 0, 0) },
   { _id: "4", text: "Today msg", createdAt: todayMsg },
+  { _id: "2", text: "Yesterday msg 1", createdAt: yesterdayMsg },
+  { _id: "1", text: "Old msg", createdAt: oldMsg },
+  { _id: "3", text: "Yesterday msg 2", createdAt: new Date(2026, 10, 17, 22, 0, 0) },
 ];
 const groups = groupByDay(sampleMessages, baseNow);
 assert.equal(groups.length, 3);
-assert.equal(groups[0].dayLabel, "10 Nov 2026");
+assert.equal(groups[0].dateKey, "2026-11-10");
+assert.equal(groups[0].label, "10 Nov 2026");
 assert.equal(groups[0].messages.length, 1);
-assert.equal(groups[1].dayLabel, "Yesterday");
+assert.equal(groups[1].dateKey, "2026-11-17");
+assert.equal(groups[1].label, "Yesterday");
 assert.equal(groups[1].messages.length, 2);
-assert.equal(groups[2].dayLabel, "Today");
+assert.equal(groups[2].dateKey, "2026-11-18");
+assert.equal(groups[2].label, "Today");
 assert.equal(groups[2].messages.length, 1);
 
 console.log("All chat dates tests passed successfully!");
