@@ -16,7 +16,9 @@
     "migrate:messages": "node --env-file=.env.local scripts/migrate-message-fields.js",
     "test:food": "node scripts/test-food-logic.js",
     "test:chatdates": "node scripts/test-chat-dates.js",
-    "test:personalization": "node --env-file=.env.local scripts/test-personalization.js"
+    "test:personalization": "node --env-file=.env.local scripts/test-personalization.js",
+    "test:chatbot": "node scripts/test-chatbot-logic.js",
+    "check:gemini": "node --env-file=.env.local scripts/check-gemini.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

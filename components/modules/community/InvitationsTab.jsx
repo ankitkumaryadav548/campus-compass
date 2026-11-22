@@ -214,7 +214,7 @@ export default function InvitationsTab({ initialData, currentUserId, onChanged }
                   {inv.note && (
                     <div className="ml-13 pl-1">
                       <p className="text-xs text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 rounded-xl px-3 py-2 leading-relaxed border border-slate-100 dark:border-slate-700">
-                        "{inv.note}"
+                        &ldquo;{inv.note}&rdquo;
                       </p>
                     </div>
                   )}

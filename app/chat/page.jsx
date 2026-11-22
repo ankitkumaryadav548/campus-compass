@@ -1,23 +1,37 @@
 // app/chat/page.jsx
-// Protected AI Chatbot module
+// Protected AI Chatbot module - Server Component
 
 import { requireUser } from "@/lib/session";
+import { connectDB } from "@/lib/mongodb";
+import { getChecklistForUser } from "@/lib/checklist";
+import { getStarterQuestions } from "@/lib/chatbot/starters";
 import AppShell from "@/components/layout/AppShell";
-import EmptyState from "@/components/ui/EmptyState";
-import { MessageSquare } from "lucide-react";
+import ChatPanel from "@/components/modules/chat/ChatPanel";
+
+export const metadata = {
+  title: "Campus Assistant – Campus Compass",
+  description: "AI-powered arrival assistant for international students in India",
+};
 
 export default async function ChatPage() {
-  await requireUser("/chat");
+  const user = await requireUser("/chat");
+
+  let starterQuestions = [];
+  try {
+    await connectDB();
+    const checklistItems = await getChecklistForUser(user);
+    const pendingItem = checklistItems.find((item) => item.status === "pending");
+    starterQuestions = getStarterQuestions(pendingItem?.title);
+  } catch (err) {
+    console.error("Failed to load checklist starters:", err.message);
+    starterQuestions = getStarterQuestions();
+  }
+
+  const firstName = user?.name ? user.name.trim().split(" ")[0] : "Student";
 
   return (
     <AppShell>
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-8 shadow-card">
-        <EmptyState
-          icon={<MessageSquare size={32} />}
-          title="AI Student Assistant – Coming Soon"
-          description="Ask questions about SIMs, banking, campus procedures, and food with context from your home country."
-        />
-      </div>
+      <ChatPanel firstName={firstName} starterQuestions={starterQuestions} />
     </AppShell>
   );
 }

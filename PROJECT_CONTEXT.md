@@ -34,7 +34,7 @@ needs a SIM card, a bank account, familiar food and friends.
 | Auth | NextAuth (Auth.js) with credentials provider, bcryptjs for hashing |
 | Icons | lucide-react |
 | Animations | framer-motion (light use) + Tailwind transitions |
-| Chatbot | LLM API called only from a server route (never expose keys to client) |
+| Chatbot | Google Gemini REST API called only from server route `app/api/chat` via `lib/chatbot` (never expose keys to client) |
 | Maps | Leaflet / react-leaflet (free) |
 | Food & Places | OpenStreetMap via Overpass API (free, no API key) |
 | Geocoding | OpenStreetMap via Nominatim (free, 1 req/sec queue, no API key) |
@@ -64,7 +64,7 @@ OSM_USER_AGENT
 | 7 | **Community** | Student invitations, WhatsApp-style 1-to-1 chat after accepted invitation, Block and Report safety tools, campus mixer events with RSVP |
 | 7.5 | **Notifications** | In-app notification bell, badge, dropdown, full history page, triggered by new chat messages and invitations |
 | 8 | **Language Help** | Common phrases and campus glossary |
-| 9 | **Chatbot** | Answers using the student's profile + matching guides from DB |
+| 9 | **Chatbot** | Answers using the student's profile facts + verified guides, checklist, and glossary from DB. In-memory page state only (no conversation history saved in DB or browser storage) |
 | 10 | **Admin Panel** | Role-protected CRUD for guides, places, events, checklist items |
 
 ---
@@ -364,6 +364,7 @@ Semantic HTML, alt text, aria-labels, keyboard navigation, sufficient contrast.
 - Do not run "npm run build" while the dev server is running. Run it only
   when I ask for a production build.
 - Only lib/osm files call Overpass or Nominatim; components never do.
+- Only lib/chatbot files call the Gemini REST API; components never do. Never send the student's name, email, university, ID, bio, or community data to the model. Never store or log chat messages or model answers anywhere.
 
 ---
 
@@ -379,6 +380,7 @@ Semantic HTML, alt text, aria-labels, keyboard navigation, sufficient contrast.
   and the student disclaimer ("Diet tags are from community-contributed OpenStreetMap data;
   please confirm with the staff before ordering"). Give students an easy link to
   "Fix or add details on OpenStreetMap".
+- Chatbot answers come strictly from the app's verified data context (profile facts, guides, checklist, glossary) and must clearly state when information is sample data. Guides referenced must show their last verified date.
 
 ---
 
