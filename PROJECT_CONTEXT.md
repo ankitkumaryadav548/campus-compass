@@ -36,6 +36,8 @@ needs a SIM card, a bank account, familiar food and friends.
 | Animations | framer-motion (light use) + Tailwind transitions |
 | Chatbot | LLM API called only from a server route (never expose keys to client) |
 | Maps | Leaflet / react-leaflet (free) |
+| Food & Places | OpenStreetMap via Overpass API (free, no API key) |
+| Geocoding | OpenStreetMap via Nominatim (free, 1 req/sec queue, no API key) |
 | Language | JavaScript (.js / .jsx), use `@/` import alias |
 
 **Environment variables** (`.env.local`, never commit):
@@ -44,6 +46,7 @@ MONGODB_URI
 NEXTAUTH_SECRET
 NEXTAUTH_URL
 LLM_API_KEY
+OSM_USER_AGENT
 ```
 
 ---
@@ -57,7 +60,7 @@ LLM_API_KEY
 | 3 | **Dashboard** | Personalized home (pending tasks, quick links, recommended content) |
 | 4 | **Checklist** | Arrival documentation tracker with deadlines and progress bar |
 | 5 | **Guides** | SIM and Bank step-by-step guides with required documents, provider list, tips, and per-user step progress |
-| 6 | **Food Finder** | Map and list, filter by cuisine, diet (halal, vegetarian, etc.), country tags, student reviews |
+| 6 | **Food Finder** | Real places from OpenStreetMap around the student's location. Filter by diet (Pure veg, Veg options, Non-veg likely), place type, radius, cuisine. Distance and walking estimates, student ratings and reviews. Free APIs: Overpass + Nominatim + Leaflet. No country tags. |
 | 7 | **Community** | Student invitations, WhatsApp-style 1-to-1 chat after accepted invitation, Block and Report safety tools, campus mixer events with RSVP |
 | 7.5 | **Notifications** | In-app notification bell, badge, dropdown, full history page, triggered by new chat messages and invitations |
 | 8 | **Language Help** | Common phrases and campus glossary |
@@ -70,8 +73,9 @@ LLM_API_KEY
 
 - A student can be from **ANY country**. NEVER hardcode country-specific logic,
   pages or components. All country differences come from **DATA TAGS** in the database.
-- Every content document (Guide, Place, ChecklistItem, Event) has tags such as
+- Every content document (Guide, ChecklistItem, Event) has tags such as
   `region: [String]` (e.g. `["Uganda"]`, `["East Africa"]`, `["ALL"]`).
+  *Note: The Food Finder module does not use country tags; it queries real OpenStreetMap places around the student's location with evidence-based diet classification and straight-line/walking distance.*
 
 **Fallback chain** when fetching content for a user:
 1. user's country
@@ -132,8 +136,16 @@ userId, itemId, status (pending|done)
 
 ### Place
 ```
-name, type (grocery|restaurant|cafeteria), cuisine[], dietTags[],
-countryTags[], address, location{lat,lng}, rating, reviews[]
+osmType ("node"|"way"), osmId (Number), name, location{lat, lng},
+ratingAverage (0-5), reviewCount (Number),
+reviews[{userId, userName, userCountry, rating, comment, isSample, createdAt}]
+(unique compound index on osmType + osmId; lazy creation on first review)
+```
+
+### OsmCache
+```
+key (String, unique), type ("places"|"geocode"), data (Mixed), expiresAt (Date)
+(unique index on key; TTL index on expiresAt for auto-expiry)
 ```
 
 ### BuddyMatch
@@ -203,6 +215,10 @@ app/
     checklist/
     guides/
     places/
+      nearby/
+      [placeKey]/
+        reviews/
+    geocode/
     buddies/
       [matchId]/
         messages/
@@ -233,6 +249,14 @@ lib/
   notifications.js
   notificationText.js
   utils.js
+  geo.js
+  placeFilters.js
+  places.js
+  osm/
+    config.js
+    overpass.js
+    nominatim.js
+    dietClassifier.js
 models/
   User.js
   Guide.js
@@ -240,6 +264,7 @@ models/
   ChecklistItem.js
   UserChecklist.js
   Place.js
+  OsmCache.js
   BuddyMatch.js
   Report.js
   Message.js
@@ -249,6 +274,8 @@ scripts/
   seed.js
   migrate-invitations.js
   migrate-direct-chat.js
+  migrate-places.js
+  test-food-logic.js
 public/
 ```
 
@@ -336,6 +363,7 @@ Semantic HTML, alt text, aria-labels, keyboard navigation, sufficient contrast.
   for example icon={<Users size={20} />}.
 - Do not run "npm run build" while the dev server is running. Run it only
   when I ask for a production build.
+- Only lib/osm files call Overpass or Nominatim; components never do.
 
 ---
 
@@ -346,6 +374,11 @@ Semantic HTML, alt text, aria-labels, keyboard navigation, sufficient contrast.
   > "Rules may change. Please confirm with the provider or your university's international office."
 - Seed script must include at least **3 sample countries** (Uganda, Vietnam, Nigeria)
   plus `"ALL"` content, to demonstrate personalization.
+- Food places come live from OpenStreetMap (free Overpass API + Nominatim, no API keys).
+  Always display the OpenStreetMap attribution ("Data © OpenStreetMap contributors")
+  and the student disclaimer ("Diet tags are from community-contributed OpenStreetMap data;
+  please confirm with the staff before ordering"). Give students an easy link to
+  "Fix or add details on OpenStreetMap".
 
 ---
 
@@ -373,5 +406,5 @@ Semantic HTML, alt text, aria-labels, keyboard navigation, sufficient contrast.
 
 ---
 
-*Last updated: 2026-11-16*
+*Last updated: 2026-11-22*
 

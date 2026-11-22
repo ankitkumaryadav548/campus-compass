@@ -23,10 +23,6 @@ function regionQuery(user) {
   return { region: { $in: buildRegionTags(user) } };
 }
 
-function placeRegionQuery(user) {
-  return { countryTags: { $in: buildRegionTags(user) } };
-}
-
 function getSpecificityLabel(item, user, field = "region") {
   const tags = item[field] || [];
   if (user?.country     && tags.includes(user.country))      return "country";

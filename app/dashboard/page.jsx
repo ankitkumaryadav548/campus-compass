@@ -6,11 +6,9 @@ import UserChecklist from "@/models/UserChecklist";
 import Guide from "@/models/Guide";
 import GuideProgress from "@/models/GuideProgress";
 import Event from "@/models/Event";
-import Place from "@/models/Place";
 
 import {
   regionQuery,
-  placeRegionQuery,
   sortBySpecificity,
   sortBuddiesByMatch,
   noContentNote,
@@ -39,12 +37,6 @@ export default async function DashboardPage() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  // Diet-aware food filter
-  const foodQuery = placeRegionQuery(user);
-  if (user.diet && ["halal", "vegetarian", "vegan"].includes(user.diet)) {
-    foodQuery.dietTags = user.diet;
-  }
-
   // Parallel server-side data fetching
   const [
     rawChecklistItems,
@@ -52,8 +44,7 @@ export default async function DashboardPage() {
     rawGuides,
     userGuideProgress,
     upcomingEvents,
-    candidateBuddies,
-    nearbyPlaces
+    candidateBuddies
   ] = await Promise.all([
     ChecklistItem.find(regionQuery(user)).sort({ order: 1 }).lean(),
     UserChecklist.find({ userId: user._id }).lean(),
@@ -74,8 +65,7 @@ export default async function DashboardPage() {
       _id: { $ne: user._id }
     })
       .select("name country regionGroup languages bio")
-      .lean(),
-    Place.find(foodQuery).limit(4).lean()
+      .lean()
   ]);
 
   // 1. Checklist processing
@@ -168,7 +158,7 @@ export default async function DashboardPage() {
             </DashboardFadeIn>
 
             <DashboardFadeIn delay={0.25}>
-              <FoodCards places={nearbyPlaces} userDiet={user.diet} />
+              <FoodCards userDiet={user.diet} />
             </DashboardFadeIn>
           </div>
 

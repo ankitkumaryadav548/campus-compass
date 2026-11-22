@@ -7,7 +7,7 @@ export default function FoodLoading() {
     <AppShell>
       <div className="max-w-7xl mx-auto px-4 sm:px-0 py-6 sm:py-8 space-y-6">
         <div>
-          <Skeleton className="h-6 w-60 mb-2" />
+          <Skeleton className="h-6 w-48 mb-2" />
           <Skeleton className="h-4 w-96" />
         </div>
 

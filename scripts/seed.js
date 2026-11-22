@@ -91,26 +91,28 @@ ChecklistItemSchema.index({ region: 1 });
 
 // ── Place ──
 const ReviewSchema = new mongoose.Schema(
-  { userName: String, rating: Number, comment: String, createdAt: { type: Date, default: Date.now } },
+  {
+    userId: mongoose.Schema.Types.ObjectId,
+    userName: String,
+    rating: Number,
+    comment: String,
+    createdAt: { type: Date, default: Date.now },
+  },
   { _id: false }
 );
 const PlaceSchema = new mongoose.Schema(
   {
-    name:        { type: String, required: true },
-    type:        { type: String, enum: ["grocery", "restaurant", "cafeteria"] },
-    cuisine:     [String],
-    dietTags:    [String],
-    countryTags: [String],
-    address:     { type: String, default: "" },
-    location:    { lat: Number, lng: Number },
-    rating:      { type: Number, default: 0 },
-    reviews:     [ReviewSchema],
-    isSample:    { type: Boolean, default: false },
+    osmType: { type: String, enum: ["node", "way", "relation"] },
+    osmId: Number,
+    name: String,
+    location: { lat: Number, lng: Number },
+    ratingAverage: { type: Number, default: 0 },
+    reviewCount: { type: Number, default: 0 },
+    reviews: [ReviewSchema],
   },
   { timestamps: true }
 );
-PlaceSchema.index({ countryTags: 1 });
-PlaceSchema.index({ cuisine: 1 });
+PlaceSchema.index({ osmType: 1, osmId: 1 }, { unique: true });
 
 // ── Event ──
 const EventSchema = new mongoose.Schema(
@@ -261,11 +263,10 @@ async function seed() {
   const existingSampleUsers = await User.find({ isSample: true }).select("_id").lean();
   const sampleUserIds = existingSampleUsers.map((u) => u._id);
 
-  const [dU, dG, dC, dP, dE, dBM, dM, dUC, dGP, dN] = await Promise.all([
+  const [dU, dG, dC, dE, dBM, dM, dUC, dGP, dN] = await Promise.all([
     User.deleteMany({ isSample: true }),
     Guide.deleteMany({ isSample: true }),
     ChecklistItem.deleteMany({ isSample: true }),
-    Place.deleteMany({ isSample: true }),
     Event.deleteMany({ isSample: true }),
     BuddyMatch.deleteMany({
       $or: [
@@ -292,7 +293,7 @@ async function seed() {
       ],
     }),
   ]);
-  console.log(`    Deleted: Users(${dU.deletedCount}) Guides(${dG.deletedCount}) ChecklistItems(${dC.deletedCount}) Places(${dP.deletedCount}) Events(${dE.deletedCount})\n`);
+  console.log(`    Deleted: Users(${dU.deletedCount}) Guides(${dG.deletedCount}) ChecklistItems(${dC.deletedCount}) Events(${dE.deletedCount})\n`);
 
   // ── 2. HASH PASSWORD (all sample users share one password) ────────────
   const SAMPLE_PASSWORD = "Sample@123";
@@ -653,128 +654,7 @@ async function seed() {
   console.log(`    ✓  ${checklistItems.length} checklist items inserted\n`);
 
   // ── 6. PLACES ─────────────────────────────────────────────────────────
-  console.log("🍽   Inserting Places…");
-  const placesData = [
-    // ── Restaurants – African / Uganda / Nigeria ──
-    {
-      name: "[SAMPLE] African Spices Kitchen", type: "restaurant",
-      cuisine: ["African", "East African"], dietTags: ["halal"],
-      countryTags: ["Uganda", "Kenya", "Tanzania"],
-      address: "12 Sample Market Road, Sample City",
-      location: nearCampus(-0.005, 0.008), rating: 4.5, isSample: true,
-      reviews: [
-        { userName: "Moses K. (Sample)", rating: 5, comment: "[SAMPLE] Best matooke outside Kampala! Feels like home." },
-        { userName: "David S. (Sample)", rating: 4, comment: "[SAMPLE] Good for halal meals. Try the groundnut soup." },
-      ],
-    },
-    {
-      name: "[SAMPLE] West African Kitchen", type: "restaurant",
-      cuisine: ["African", "West African"], dietTags: ["halal"],
-      countryTags: ["Nigeria", "Ghana"],
-      address: "7 College Lane, Sample City",
-      location: nearCampus(0.003, -0.012), rating: 4.3, isSample: true,
-      reviews: [
-        { userName: "Amina Y. (Sample)", rating: 5, comment: "[SAMPLE] The jollof rice is authentic! Egusi soup available on weekends." },
-      ],
-    },
-
-    // ── Restaurants – Vietnamese / Southeast Asian ──
-    {
-      name: "[SAMPLE] Pho Garden", type: "restaurant",
-      cuisine: ["Vietnamese", "Asian"], dietTags: ["none", "halal-on-request"],
-      countryTags: ["Vietnam", "Southeast Asia"],
-      address: "23 International Student Mall, Sample City",
-      location: nearCampus(0.007, 0.005), rating: 4.6, isSample: true,
-      reviews: [
-        { userName: "Linh P. (Sample)", rating: 5, comment: "[SAMPLE] The pho is very close to Vietnamese style. Owners are from Vietnam!" },
-      ],
-    },
-    {
-      name: "[SAMPLE] Asian Bites", type: "restaurant",
-      cuisine: ["Asian", "Pan-Asian"], dietTags: ["vegetarian"],
-      countryTags: ["Vietnam", "China", "Thailand", "Southeast Asia"],
-      address: "5 Campus Gate Road, Sample City",
-      location: nearCampus(-0.002, 0.015), rating: 4.1, isSample: true,
-      reviews: [],
-    },
-
-    // ── Restaurants – Indian / General ──
-    {
-      name: "[SAMPLE] Campus Canteen", type: "cafeteria",
-      cuisine: ["Indian"], dietTags: ["vegetarian", "vegan"],
-      countryTags: ["ALL"],
-      address: `${CAMPUS_NAME}, Block A`,
-      location: nearCampus(0.001, 0.001), rating: 3.8, isSample: true,
-      reviews: [
-        { userName: "Moses K. (Sample)", rating: 4, comment: "[SAMPLE] Good South Indian breakfast. Dal chawal is affordable." },
-      ],
-    },
-    {
-      name: "[SAMPLE] Halal Corner Café", type: "restaurant",
-      cuisine: ["Indian", "Middle Eastern"], dietTags: ["halal"],
-      countryTags: ["ALL"],
-      address: "2 Hostel Road, Sample City",
-      location: nearCampus(-0.004, -0.003), rating: 4.0, isSample: true,
-      reviews: [],
-    },
-    {
-      name: "[SAMPLE] South Indian Delight", type: "restaurant",
-      cuisine: ["Indian", "South Indian"], dietTags: ["vegetarian", "vegan"],
-      countryTags: ["ALL"],
-      address: "15 University Avenue, Sample City",
-      location: nearCampus(0.009, -0.006), rating: 4.4, isSample: true,
-      reviews: [],
-    },
-
-    // ── Grocery stores ──
-    {
-      name: "[SAMPLE] African Grocery & Spices", type: "grocery",
-      cuisine: [], dietTags: ["halal"],
-      countryTags: ["Uganda", "Nigeria", "Kenya", "Ghana"],
-      address: "88 Student Bazaar, Sample City",
-      location: nearCampus(-0.010, 0.006), rating: 4.2, isSample: true,
-      reviews: [
-        { userName: "Grace N. (Sample)", rating: 4, comment: "[SAMPLE] Stocks cassava flour, plantains, and groundnut paste. Worth the walk!" },
-      ],
-    },
-    {
-      name: "[SAMPLE] Asian Food Mart", type: "grocery",
-      cuisine: [], dietTags: ["none"],
-      countryTags: ["Vietnam", "China", "Southeast Asia"],
-      address: "3 New Market Street, Sample City",
-      location: nearCampus(0.012, 0.009), rating: 4.3, isSample: true,
-      reviews: [
-        { userName: "Linh P. (Sample)", rating: 5, comment: "[SAMPLE] Has Vietnamese rice paper, fish sauce, and pho noodles!" },
-      ],
-    },
-    {
-      name: "[SAMPLE] International Supermart", type: "grocery",
-      cuisine: [], dietTags: ["none"],
-      countryTags: ["ALL"],
-      address: "Campus Commercial Complex, Sample City",
-      location: nearCampus(0.000, 0.012), rating: 3.9, isSample: true,
-      reviews: [],
-    },
-    {
-      name: "[SAMPLE] Halal Meat & Grocery", type: "grocery",
-      cuisine: [], dietTags: ["halal"],
-      countryTags: ["ALL"],
-      address: "11 Mosque Road, Sample City",
-      location: nearCampus(-0.008, -0.010), rating: 4.1, isSample: true,
-      reviews: [],
-    },
-    {
-      name: "[SAMPLE] Veggie World", type: "grocery",
-      cuisine: [], dietTags: ["vegetarian", "vegan"],
-      countryTags: ["ALL"],
-      address: "7 Green Lane, Sample City",
-      location: nearCampus(0.006, -0.008), rating: 4.0, isSample: true,
-      reviews: [],
-    },
-  ];
-
-  const places = await Place.insertMany(placesData);
-  console.log(`    ✓  ${places.length} places inserted\n`);
+  console.log("🍽   Real food and grocery places are queried dynamically from OpenStreetMap (no sample places inserted).\n");
 
   // ── 7. EVENTS ─────────────────────────────────────────────────────────
   console.log("📅  Inserting Events…");
@@ -1031,7 +911,7 @@ async function seed() {
   console.log(`     Users         : ${users.length}`);
   console.log(`     Guides        : ${guides.length}`);
   console.log(`     ChecklistItems: ${checklistItems.length}`);
-  console.log(`     Places        : ${places.length}`);
+  console.log("     Places        : Dynamic (OpenStreetMap)");
   console.log(`     Events        : ${events.length}`);
   console.log(`     BuddyMatches  : ${buddyMatches.length}`);
   console.log(`     Messages      : ${messages.length}`);
