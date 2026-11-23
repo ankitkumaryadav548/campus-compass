@@ -5,7 +5,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { MessageSquare, RefreshCw, AlertCircle, X, Sparkles, Bot } from "lucide-react";
+import { MessageSquare, RefreshCw, AlertCircle, X, Bot } from "lucide-react";
 import MessageList from "./MessageList";
 import ChatInput from "./ChatInput";
 import StarterChips from "./StarterChips";
@@ -14,18 +14,24 @@ export default function ChatPanel({ firstName = "Student", starterQuestions = []
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isThinking, setIsThinking] = useState(false);
   const [error, setError] = useState(null);
   const [waitSeconds, setWaitSeconds] = useState(0);
   const [isBannerDismissed, setIsBannerDismissed] = useState(false);
 
-  // Reference to abort controller for canceling in-flight request
+  // Reference to abort controller for canceling in-flight fetch request
   const abortControllerRef = useRef(null);
+  // Reference to interval for typewriter streaming effect
+  const typingIntervalRef = useRef(null);
 
-  // Cleanup abort controller on unmount
+  // Cleanup abort controller and interval on unmount
   useEffect(() => {
     return () => {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
+      }
+      if (typingIntervalRef.current) {
+        clearInterval(typingIntervalRef.current);
       }
     };
   }, []);
@@ -39,6 +45,32 @@ export default function ChatPanel({ firstName = "Student", starterQuestions = []
     return () => clearInterval(interval);
   }, [waitSeconds]);
 
+  const handleStop = useCallback(() => {
+    if (typingIntervalRef.current) {
+      clearInterval(typingIntervalRef.current);
+      typingIntervalRef.current = null;
+      setMessages((prev) => {
+        const copy = [...prev];
+        const last = copy.length - 1;
+        if (last >= 0 && copy[last].role === "assistant") {
+          copy[last] = {
+            ...copy[last],
+            isTyping: false,
+          };
+        }
+        return copy;
+      });
+      setIsLoading(false);
+      setIsThinking(false);
+    }
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+      setIsLoading(false);
+      setIsThinking(false);
+    }
+  }, []);
+
   const sendMessage = useCallback(
     async (textToSend, customHistory = null) => {
       const trimmed = (textToSend || "").trim();
@@ -46,12 +78,19 @@ export default function ChatPanel({ firstName = "Student", starterQuestions = []
 
       setError(null);
 
+      // Clear any prior running typewriter interval
+      if (typingIntervalRef.current) {
+        clearInterval(typingIntervalRef.current);
+        typingIntervalRef.current = null;
+      }
+
       // Construct history payload
       const baseHistory = customHistory !== null ? customHistory : messages;
       const newMessages = [...baseHistory, { role: "user", text: trimmed }];
       setMessages(newMessages);
       setInput("");
       setIsLoading(true);
+      setIsThinking(true);
 
       const controller = new AbortController();
       abortControllerRef.current = controller;
@@ -74,6 +113,8 @@ export default function ChatPanel({ firstName = "Student", starterQuestions = []
         const data = await response.json();
 
         if (!response.ok) {
+          setIsThinking(false);
+          setIsLoading(false);
           if (response.status === 429 && data.retryAfterSeconds) {
             setWaitSeconds(data.retryAfterSeconds);
           }
@@ -84,18 +125,67 @@ export default function ChatPanel({ firstName = "Student", starterQuestions = []
           return;
         }
 
-        // Add assistant message
+        // Response arrived successfully: turn off thinking indicator and stream typewriter text
+        setIsThinking(false);
+        const fullAnswer = data.answer || "";
+        const sources = data.sources || [];
+        const tokens = fullAnswer.split(/(\s+)/);
+
+        // Mount initial assistant message with typing cursor
         setMessages((prev) => [
           ...prev,
           {
             role: "assistant",
-            text: data.answer,
-            sources: data.sources || [],
+            text: "",
+            sources: sources,
+            isTyping: true,
           },
         ]);
+
+        let tokenIdx = 0;
+        const chunkSize = tokens.length > 150 ? 2 : 1;
+        const speedMs = 18;
+
+        typingIntervalRef.current = setInterval(() => {
+          tokenIdx += chunkSize;
+          if (tokenIdx >= tokens.length) {
+            if (typingIntervalRef.current) {
+              clearInterval(typingIntervalRef.current);
+              typingIntervalRef.current = null;
+            }
+            setMessages((prev) => {
+              const copy = [...prev];
+              const last = copy.length - 1;
+              if (last >= 0 && copy[last].role === "assistant") {
+                copy[last] = {
+                  ...copy[last],
+                  text: fullAnswer,
+                  isTyping: false,
+                };
+              }
+              return copy;
+            });
+            setIsLoading(false);
+          } else {
+            const partial = tokens.slice(0, tokenIdx).join("");
+            setMessages((prev) => {
+              const copy = [...prev];
+              const last = copy.length - 1;
+              if (last >= 0 && copy[last].role === "assistant") {
+                copy[last] = {
+                  ...copy[last],
+                  text: partial,
+                  isTyping: true,
+                };
+              }
+              return copy;
+            });
+          }
+        }, speedMs);
       } catch (err) {
+        setIsThinking(false);
+        setIsLoading(false);
         if (err.name === "AbortError") {
-          // Request was stopped by user
           return;
         }
         setError({
@@ -103,20 +193,11 @@ export default function ChatPanel({ firstName = "Student", starterQuestions = []
           code: "network_error",
         });
       } finally {
-        setIsLoading(false);
         abortControllerRef.current = null;
       }
     },
     [messages, isLoading, waitSeconds]
   );
-
-  const handleStop = () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-      setIsLoading(false);
-    }
-  };
 
   const handleRetry = () => {
     if (messages.length === 0 || isLoading) return;
@@ -137,10 +218,16 @@ export default function ChatPanel({ firstName = "Student", starterQuestions = []
       );
       if (!confirmClear) return;
     }
+    if (typingIntervalRef.current) {
+      clearInterval(typingIntervalRef.current);
+      typingIntervalRef.current = null;
+    }
     handleStop();
     setMessages([]);
     setError(null);
     setInput("");
+    setIsLoading(false);
+    setIsThinking(false);
   };
 
   return (
@@ -217,7 +304,7 @@ export default function ChatPanel({ firstName = "Student", starterQuestions = []
       ) : (
         <MessageList
           messages={messages}
-          isThinking={isLoading}
+          isThinking={isThinking}
           error={error}
           onRetry={error ? handleRetry : null}
         />

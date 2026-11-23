@@ -18,7 +18,7 @@ export default function StarterChips({ questions = [], onSelectQuestion }) {
             key={idx}
             type="button"
             onClick={() => onSelectQuestion(question)}
-            className="text-left p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-primary-400 dark:hover:border-primary-600 hover:bg-slate-50 dark:hover:bg-slate-850 text-slate-700 dark:text-slate-300 text-sm transition-all shadow-sm hover:shadow active:scale-[0.99] flex flex-col justify-between"
+            className="text-left p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-primary-400 dark:hover:border-primary-600 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm transition-all shadow-sm hover:shadow active:scale-[0.99] flex flex-col justify-between"
           >
             <span className="font-medium text-slate-900 dark:text-slate-100">
               {question}
