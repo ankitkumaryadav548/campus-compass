@@ -202,9 +202,9 @@ export default function OnboardingPage() {
       });
 
       // Refresh the client session to populate updated country and onboardingDone
-      await update();
-      router.refresh();
-      router.push("/dashboard");
+      await update({ onboardingDone: true, country: formData.country });
+      // Direct navigation ensures the updated JWT cookie is evaluated by middleware
+      window.location.href = "/dashboard";
     } catch (error) {
       toast({
         message: error.message || "Failed to save profile. Please check your answers.",

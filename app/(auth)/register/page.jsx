@@ -242,9 +242,17 @@ export default function RegisterPage() {
             {errors.general && (
               <div
                 role="alert"
-                className="mb-5 p-3.5 rounded-xl bg-danger-50 dark:bg-danger-900/20 border border-danger-200 dark:border-danger-800 text-danger-700 dark:text-danger-300 text-sm"
+                className="mb-5 p-3.5 rounded-xl bg-danger-50 dark:bg-danger-900/20 border border-danger-200 dark:border-danger-800 text-danger-700 dark:text-danger-300 text-sm flex flex-col gap-2"
               >
-                {errors.general}
+                <span>{errors.general}</span>
+                {errors.general.includes("already exists") && (
+                  <Link
+                    href={`/login?email=${encodeURIComponent(email)}`}
+                    className="font-semibold text-primary-600 dark:text-primary-400 hover:underline text-xs flex items-center gap-1"
+                  >
+                    Click here to Log In &rarr;
+                  </Link>
+                )}
               </div>
             )}
 
