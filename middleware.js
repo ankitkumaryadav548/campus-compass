@@ -89,8 +89,17 @@ export async function middleware(req) {
     return NextResponse.redirect(new URL("/admin", req.url));
   }
 
-  // 8. Onboarding enforcement for students:
-  if (!token.onboardingDone && isStudentPage) {
+  // 8. Onboarding enforcement for students (do not redirect if already on /onboarding):
+  const requiresOnboarding =
+    pathname.startsWith("/dashboard") ||
+    pathname.startsWith("/checklist") ||
+    pathname.startsWith("/guides") ||
+    pathname.startsWith("/food") ||
+    pathname.startsWith("/community") ||
+    pathname.startsWith("/language") ||
+    pathname.startsWith("/chat");
+
+  if (!token.onboardingDone && requiresOnboarding) {
     return NextResponse.redirect(new URL("/onboarding", req.url));
   }
 
