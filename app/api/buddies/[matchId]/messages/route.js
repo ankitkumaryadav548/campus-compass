@@ -205,6 +205,19 @@ export async function POST(request, { params }) {
       );
     }
 
+    const partnerId = requesterId === effectiveUserId ? recipientId : requesterId;
+    const [senderUser, partnerUser] = await Promise.all([
+      User.findById(effectiveUserId).select("isActive").lean(),
+      User.findById(partnerId).select("isActive").lean(),
+    ]);
+
+    if (senderUser?.isActive === false || partnerUser?.isActive === false) {
+      return NextResponse.json(
+        { error: "This account is inactive." },
+        { status: 403 }
+      );
+    }
+
     if (!checkMessageRateLimit(effectiveUserId)) {
       return NextResponse.json(
         { error: "You are sending messages too quickly. Please slow down." },

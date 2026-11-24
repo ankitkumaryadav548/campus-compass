@@ -583,8 +583,14 @@ export default function ChatWindow({
         </button>
       )}
 
-      {/* Bottom Area: Message Input OR Blocked Bar */}
-      {isBlocked ? (
+      {/* Bottom Area: Message Input OR Inactive Bar OR Blocked Bar */}
+      {partner?.isActive === false ? (
+        <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-amber-50 dark:bg-amber-950/40 flex items-center justify-center shrink-0">
+          <span className="text-xs font-semibold text-amber-800 dark:text-amber-300">
+            This account is inactive
+          </span>
+        </div>
+      ) : isBlocked ? (
         isBlocker ? (
           <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 flex items-center justify-between gap-3 shrink-0">
             <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400">

@@ -40,6 +40,7 @@ const UserSchema = new mongoose.Schema(
     visaType:       { type: String, default: "" },
     arrivalDate:    Date,
     isSenior:       { type: Boolean, default: false },
+    isActive:       { type: Boolean, default: true },
     openToConnect:  { type: Boolean, default: true },
     lastSeenAt:     { type: Date, default: null },
     bio:            { type: String, default: "" },
@@ -57,16 +58,24 @@ const StepSchema     = new mongoose.Schema({ order: Number, title: String, descr
 
 const GuideSchema = new mongoose.Schema(
   {
-    category:     { type: String, enum: ["sim", "bank", "language"], required: true },
+    category:     { type: String, enum: ["sim", "bank", "language", "frro", "medical", "academics", "campus", "essentials"], required: true },
     title:        { type: String, required: true },
+    slug:         String,
+    summary:      String,
     region:       [String],
+    applicableRegions: [String],
     visaTypes:    [String],
+    applicableVisaTypes: [String],
     requiredDocs: [String],
+    requiredDocuments: [String],
     providers:    [ProviderSchema],
     steps:        [StepSchema],
     tips:         [String],
+    commonMistakes: [String],
+    searchTags:   [String],
     sourceUrl:    String,
     lastVerified: Date,
+    status:       { type: String, enum: ["draft", "published", "archived"], default: "published" },
     isSample:     { type: Boolean, default: false },
   },
   { timestamps: true }
@@ -108,6 +117,7 @@ const PlaceSchema = new mongoose.Schema(
     location: { lat: Number, lng: Number },
     ratingAverage: { type: Number, default: 0 },
     reviewCount: { type: Number, default: 0 },
+    dietLabel: { type: String, enum: ["pure_veg", "veg_and_nonveg", "nonveg_only", null], default: null },
     reviews: [ReviewSchema],
   },
   { timestamps: true }
@@ -627,6 +637,42 @@ async function seed() {
         DISCLAIMER,
       ],
     },
+
+    // ════ STALE GUIDE (>90 days since verification) ════
+    {
+      category: "bank",
+      title: "[SAMPLE] Legacy Banking Procedures (Needs Verification)",
+      summary: "Historical guidelines for off-campus commercial bank accounts.",
+      region: ["ALL"],
+      applicableRegions: ["ALL"],
+      visaTypes: ["student"],
+      isSample: true,
+      status: "published",
+      lastVerified: daysAgo(120), // 120 days ago -> stale!
+      requiredDocs: ["Passport", "Visa", "Letter"],
+      steps: [
+        { order: 1, title: "Locate Branch", description: "Old branch procedures before biometric verification." }
+      ],
+      tips: ["Check with international office before visiting."],
+    },
+
+    // ════ DRAFT GUIDE (Unpublished draft) ════
+    {
+      category: "medical",
+      title: "[SAMPLE] Campus Medical Clinic & Emergency Services (Draft)",
+      summary: "Draft protocol for emergency healthcare registration and student insurance.",
+      region: ["ALL"],
+      applicableRegions: ["ALL"],
+      visaTypes: ["student"],
+      isSample: true,
+      status: "draft",
+      lastVerified: daysAgo(5),
+      requiredDocs: ["Student Health Card"],
+      steps: [
+        { order: 1, title: "Visit Uni-Hospital", description: "Located near gate 4. Carry student ID card." }
+      ],
+      tips: ["Emergency hotline operates 24/7."],
+    },
   ];
 
   const guides = await Guide.insertMany(guidesData);
@@ -904,6 +950,41 @@ async function seed() {
   const notifications = await Notification.insertMany(sampleNotificationsData);
   console.log(`    ✓  ${notifications.length} notifications inserted\n`);
 
+  // ── 9. SAMPLE REPORTS ──────────────────────────────────────────────────
+  console.log("🛡️  Inserting Sample Reports…");
+  const sampleReportsData = [
+    {
+      reporterId: moses._id,
+      reportedId: chidi._id,
+      matchId:    aminaChidiMatch._id,
+      reason:     "spam",
+      details:    "[SAMPLE] User sent unsolicited promotional links for off-campus accommodation.",
+      status:     "open",
+    },
+    {
+      reporterId: amina._id,
+      reportedId: david._id,
+      matchId:    aminaChidiMatch._id,
+      reason:     "harassment",
+      details:    "[SAMPLE] Persistent unwanted messages outside of student mentoring topics.",
+      status:     "open",
+    },
+    {
+      reporterId: grace._id,
+      reportedId: chidi._id,
+      matchId:    aminaChidiMatch._id,
+      reason:     "inappropriate",
+      details:    "[SAMPLE] Minor disagreement regarding club meeting times.",
+      status:     "reviewed",
+      resolution: "dismissed",
+      adminNote:  "Investigated and resolved informally. No conduct violation.",
+      reviewedAt: daysAgo(2),
+    },
+  ];
+
+  const reports = await Report.insertMany(sampleReportsData);
+  console.log(`    ✓  ${reports.length} safety reports inserted\n`);
+
   // ── SUMMARY ───────────────────────────────────────────────────────────
   console.log("─".repeat(55));
   console.log("🎉  Seed complete!\n");
@@ -916,6 +997,7 @@ async function seed() {
   console.log(`     BuddyMatches  : ${buddyMatches.length}`);
   console.log(`     Messages      : ${messages.length}`);
   console.log(`     Notifications : ${notifications.length}`);
+  console.log(`     Reports       : ${reports.length}`);
   console.log("\n   Sample user login (all):");
   console.log("     Email   : moses.kato@sample.test  (or any @sample.test address)");
   console.log(`     Password: ${SAMPLE_PASSWORD}`);

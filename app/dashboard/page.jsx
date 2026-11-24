@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/session";
 import { connectDB } from "@/lib/mongodb";
 import User from "@/models/User";
@@ -29,6 +30,9 @@ import ProfileCard from "@/components/modules/dashboard/ProfileCard";
 
 export default async function DashboardPage() {
   const sessionUser = await requireUser("/dashboard");
+  if (sessionUser.role === "admin") {
+    redirect("/admin");
+  }
 
   await connectDB();
   const dbUser = await User.findById(sessionUser.id).select("-password").lean();
@@ -50,7 +54,8 @@ export default async function DashboardPage() {
     UserChecklist.find({ userId: user._id }).lean(),
     Guide.find({
       ...regionQuery(user),
-      category: { $in: ["sim", "bank"] }
+      category: { $in: ["sim", "bank"] },
+      status: "published",
     }).lean(),
     GuideProgress.find({ userId: user._id }).lean(),
     Event.find({

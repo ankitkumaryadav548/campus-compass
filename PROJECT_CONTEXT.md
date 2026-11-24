@@ -65,7 +65,7 @@ OSM_USER_AGENT
 | 7.5 | **Notifications** | In-app notification bell, badge, dropdown, full history page, triggered by new chat messages and invitations |
 | 8 | **Language Help** | Common phrases and campus glossary |
 | 9 | **Chatbot** | Answers using the student's profile facts + verified guides, checklist, and glossary from DB. In-memory page state only (no conversation history saved in DB or browser storage) |
-| 10 | **Admin Panel** | Role-protected CRUD for guides, places, events, checklist items |
+| 10 | **Admin Panel** | Role-protected console with 8 sections: Overview, Guides, Checklist, Events, Food labels, Reports, Users, Activity log. Strict privacy: admins never read private chat messages. Audit logging on all mutations. |
 
 ---
 
@@ -106,15 +106,20 @@ Invitation-based connection flow: student sends an invitation (optional plain te
 ```
 name, email (unique), password (hashed), role (student|buddy|admin),
 country, regionGroup, languages[], diet, university, visaType, arrivalDate,
-isSenior (Boolean), openToConnect (Boolean, default true), bio, onboardingDone (Boolean),
+isSenior (Boolean), isActive (Boolean, default true), deactivatedAt (Date), deactivatedBy (ObjectId),
+openToConnect (Boolean, default true), bio, onboardingDone (Boolean),
 lastSeenAt (Date, default null), createdAt
 ```
 
 ### Guide
 ```
-category (sim|bank|language), title, region[], visaTypes[],
-requiredDocs[], providers[{name, notes}], steps[{order, title, description}],
-tips[], sourceUrl, lastVerified (Date), updatedAt
+category (sim|bank|language|frro|medical|academics|campus|essentials), title, slug, summary,
+region[], applicableRegions[], visaTypes[], applicableVisaTypes[],
+requiredDocs[], requiredDocuments[], providers[{name, bestFor, link}],
+steps[{order, title, detail, tip}], tips[], commonMistakes[], searchTags[],
+sourceUrl, lastVerified (Date), status (draft|published|archived, default published),
+createdBy, updatedBy, isSample, createdAt, updatedAt
+(compound index on status + category)
 ```
 
 ### GuideProgress
@@ -125,7 +130,9 @@ userId, guideId, completedSteps[Number]
 
 ### ChecklistItem
 ```
-title, description, region[], deadlineOffsetDays, order,
+title, description, region[], applicableRegions[], applicableVisaTypes[],
+category (before_arrival|first_week|first_month|academics), isEssential (Boolean),
+deadlineOffsetDays, order, priority,
 guideCategory (enum: "sim" | "bank" | null) – links item to its guide page
 ```
 
@@ -138,8 +145,10 @@ userId, itemId, status (pending|done)
 ```
 osmType ("node"|"way"), osmId (Number), name, location{lat, lng},
 ratingAverage (0-5), reviewCount (Number),
+dietLabel ("pure_veg"|"veg_and_nonveg"|"nonveg_only"|null, default null),
+dietLabelBy (ObjectId), dietLabelAt (Date),
 reviews[{userId, userName, userCountry, rating, comment, isSample, createdAt}]
-(unique compound index on osmType + osmId; lazy creation on first review)
+(unique compound index on osmType + osmId; lazy creation on first review or diet label)
 ```
 
 ### OsmCache
@@ -158,8 +167,18 @@ blockedBy, lastMessageAt, inviteNote (max 150 chars), invitedAt, respondedAt, ex
 ### Report
 ```
 reporterId, reportedId, matchId, reason (spam|harassment|inappropriate|fake_profile|other),
-details (max 300), status (open|reviewed, default open), createdAt
+details (max 300), status (open|reviewed, default open),
+resolution (dismissed|reviewed|account_deactivated, default null),
+adminNote (max 500), reviewedBy (ObjectId), reviewedAt (Date), createdAt
 (indexes on status + createdAt, reporterId + matchId)
+```
+
+### AuditLog
+```
+adminId (ObjectId), adminName (String), action (String),
+targetType (String), targetId (String), targetName (String),
+details (Mixed), createdAt (Date, immutable)
+(compound indexes on action + createdAt, targetType + targetId)
 ```
 
 ### Message
@@ -365,6 +384,7 @@ Semantic HTML, alt text, aria-labels, keyboard navigation, sufficient contrast.
   when I ask for a production build.
 - Only lib/osm files call Overpass or Nominatim; components never do.
 - Only lib/chatbot files call the Gemini REST API; components never do. Never send the student's name, email, university, ID, bio, or community data to the model. Never store or log chat messages or model answers anywhere.
+- Admin rules: Admins never read private chat contents or personal message history. Admin routes enforce requireAdmin and re-verify role/isActive on the server. Deactivated accounts are blocked at login, middleware, and API routes. Mutations are rate-limited (60/min) and written to the immutable AuditLog. Student-facing queries must always filter status: "published".
 
 ---
 

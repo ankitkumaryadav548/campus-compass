@@ -17,6 +17,10 @@ const ReportSchema = new Schema(
       ref: "User",
       required: true,
     },
+    reportedUserId: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+    },
     matchId: {
       type: Schema.Types.ObjectId,
       ref: "BuddyMatch",
@@ -24,7 +28,7 @@ const ReportSchema = new Schema(
     },
     reason: {
       type: String,
-      enum: ["spam", "harassment", "inappropriate", "fake_profile", "other"],
+      enum: ["spam", "harassment", "inappropriate", "inappropriate_behavior", "fake_profile", "safety_concern", "other"],
       required: true,
     },
     details: {
@@ -37,6 +41,26 @@ const ReportSchema = new Schema(
       type: String,
       enum: ["open", "reviewed"],
       default: "open",
+    },
+    resolution: {
+      type: String,
+      enum: ["dismissed", "reviewed", "account_deactivated"],
+      default: null,
+    },
+    adminNote: {
+      type: String,
+      maxlength: 500,
+      trim: true,
+      default: "",
+    },
+    reviewedBy: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    reviewedAt: {
+      type: Date,
+      default: null,
     },
   },
   { timestamps: true }

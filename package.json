@@ -14,6 +14,8 @@
     "migrate:notifications": "node --env-file=.env.local scripts/migrate-notifications.js",
     "migrate:buddy": "node --env-file=.env.local scripts/migrate-buddy-fields.js",
     "migrate:messages": "node --env-file=.env.local scripts/migrate-message-fields.js",
+    "migrate:admin": "node --env-file=.env.local scripts/migrate-admin.js",
+    "test:admin": "node scripts/test-admin-logic.js",
     "test:food": "node scripts/test-food-logic.js",
     "test:chatdates": "node scripts/test-chat-dates.js",
     "test:personalization": "node --env-file=.env.local scripts/test-personalization.js",

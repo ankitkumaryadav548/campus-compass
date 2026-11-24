@@ -65,6 +65,7 @@ export async function PATCH(request) {
 
     const guide = await Guide.findOne({
       _id: guideId,
+      status: "published",
       ...regionQuery(session.user),
       ...visaFilter,
     }).lean();

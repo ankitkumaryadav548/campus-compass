@@ -33,9 +33,18 @@ export async function middleware(req) {
   const isAuthenticated = Boolean(token);
   const isPublicPage = PUBLIC_PATHS.includes(pathname);
 
-  // 3. Handle public auth pages when already logged in
+  // 3. Inactive account enforcement
+  if (token && token.isActive === false) {
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json({ error: "Account inactive", code: "inactive" }, { status: 401 });
+    }
+    return NextResponse.redirect(new URL("/login?error=inactive", req.url));
+  }
+
+  // 4. Handle public auth pages when already logged in
   if (isAuthenticated && (pathname === "/login" || pathname === "/register")) {
-    return NextResponse.redirect(new URL("/dashboard", req.url));
+    const dest = token.role === "admin" ? "/admin" : "/dashboard";
+    return NextResponse.redirect(new URL(dest, req.url));
   }
 
   // Allow access to public pages if not logged in
@@ -43,18 +52,18 @@ export async function middleware(req) {
     return NextResponse.next();
   }
 
-  // 4. Require authentication for everything else
+  // 5. Require authentication for everything else
   if (!isAuthenticated) {
-    // If it's an API route, return 401 JSON
     if (pathname.startsWith("/api/")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const callbackUrl = encodeURIComponent(`${pathname}${search}`);
-    return NextResponse.redirect(new URL(`/login?callbackUrl=${callbackUrl}`, req.url));
+    const roleParam = pathname.startsWith("/admin") ? "&role=admin" : "";
+    return NextResponse.redirect(new URL(`/login?callbackUrl=${callbackUrl}${roleParam}`, req.url));
   }
 
-  // 5. Admin route protection: /admin and /api/admin/* require role === "admin"
+  // 6. Admin route protection: /admin and /api/admin/* require role === "admin"
   if (pathname.startsWith("/admin") || pathname.startsWith("/api/admin")) {
     if (token.role !== "admin") {
       if (pathname.startsWith("/api/")) {
@@ -65,37 +74,31 @@ export async function middleware(req) {
     return NextResponse.next();
   }
 
-  // 6. Onboarding enforcement:
-  // If authenticated but onboardingDone is false, redirect module pages to /onboarding
-  // Do NOT redirect /onboarding itself or /api routes
-  const isModulePage =
+  // 7. Admin isolation: Admins only see the admin panel, not student module pages
+  const isStudentPage =
     pathname.startsWith("/dashboard") ||
     pathname.startsWith("/checklist") ||
     pathname.startsWith("/guides") ||
     pathname.startsWith("/food") ||
     pathname.startsWith("/community") ||
     pathname.startsWith("/language") ||
-    pathname.startsWith("/chat");
+    pathname.startsWith("/chat") ||
+    pathname.startsWith("/onboarding");
 
-  if (!token.onboardingDone && isModulePage) {
-    return NextResponse.redirect(new URL("/onboarding", req.url));
+  if (token.role === "admin" && isStudentPage) {
+    return NextResponse.redirect(new URL("/admin", req.url));
   }
 
-  // If onboarding IS done and user tries to access /onboarding, we could allow or redirect to /dashboard
-  // PROJECT_CONTEXT.md specifies that onboarding form is Prompt 4, so allowing it is fine.
+  // 8. Onboarding enforcement for students:
+  if (!token.onboardingDone && isStudentPage) {
+    return NextResponse.redirect(new URL("/onboarding", req.url));
+  }
 
   return NextResponse.next();
 }
 
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     */
     "/((?!_next/static|_next/image|favicon.ico).*)",
   ],
 };
-

@@ -31,6 +31,23 @@ const GuideSchema = new Schema(
     lastVerified: { type: Date },
     // Disclaimer is always shown in the UI; not stored per guide
     isSample:     { type: Boolean, default: false },
+
+    // Publication status and authorship
+    status: {
+      type: String,
+      enum: ["draft", "published", "archived"],
+      default: "published",
+    },
+    createdBy: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    updatedBy: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
   },
   { timestamps: true }
 );
@@ -39,6 +56,7 @@ const GuideSchema = new Schema(
 GuideSchema.index({ region: 1 });
 GuideSchema.index({ category: 1 });
 GuideSchema.index({ category: 1, region: 1 });
+GuideSchema.index({ status: 1, category: 1 });
 
 const Guide = mongoose.models.Guide || mongoose.model("Guide", GuideSchema);
 export default Guide;

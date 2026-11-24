@@ -93,7 +93,7 @@ export default function Navbar() {
   const handleLogout = async () => {
     setDropdownOpen(false);
     setMenuOpen(false);
-    await signOut({ callbackUrl: "/" });
+    await signOut({ callbackUrl: user?.role === "admin" ? "/login?role=admin" : "/" });
   };
 
   return (
@@ -109,7 +109,7 @@ export default function Navbar() {
           <div className="flex h-16 items-center justify-between">
             {/* Logo */}
             <Link
-              href="/"
+              href={user?.role === "admin" ? "/admin" : "/"}
               className="flex items-center gap-2 font-bold text-xl text-primary-600 dark:text-primary-400 hover:opacity-85 transition-opacity"
               aria-label="Campus Compass home"
             >
@@ -118,28 +118,36 @@ export default function Navbar() {
             </Link>
 
             {/* Desktop nav links */}
-            <ul className="hidden md:flex items-center gap-1" role="list">
-              {NAV_LINKS.map((link) => (
-                <li key={link.href}>
-                  <Link
-                    href={link.href}
-                    className={cn(
-                      "px-4 py-2 rounded-lg text-sm font-medium transition-colors",
-                      pathname === link.href
-                        ? "text-primary-600 bg-primary-50 dark:bg-primary-900/30 dark:text-primary-400"
-                        : "text-slate-600 hover:text-primary-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800"
-                    )}
-                  >
-                    {link.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
+            {user?.role !== "admin" ? (
+              <ul className="hidden md:flex items-center gap-1" role="list">
+                {NAV_LINKS.map((link) => (
+                  <li key={link.href}>
+                    <Link
+                      href={link.href}
+                      className={cn(
+                        "px-4 py-2 rounded-lg text-sm font-medium transition-colors",
+                        pathname === link.href
+                          ? "text-primary-600 bg-primary-50 dark:bg-primary-900/30 dark:text-primary-400"
+                          : "text-slate-600 hover:text-primary-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800"
+                      )}
+                    >
+                      {link.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="hidden md:flex items-center gap-2">
+                <span className="px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                  Staff Administrator Portal
+                </span>
+              </div>
+            )}
 
             {/* Right side: theme toggle + auth menu */}
             <div className="flex items-center gap-2.5">
-              {/* Notifications */}
-              {isAuthenticated && <NotificationBell />}
+              {/* Notifications (Students only) */}
+              {isAuthenticated && user?.role !== "admin" && <NotificationBell />}
 
               {/* Theme toggle */}
               <button
@@ -196,17 +204,7 @@ export default function Navbar() {
                       </div>
 
                       <div className="py-1">
-                        <Link
-                          href="/dashboard"
-                          role="menuitem"
-                          onClick={() => setDropdownOpen(false)}
-                          className="flex items-center gap-2.5 px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
-                        >
-                          <LayoutDashboard size={16} className="text-slate-400" />
-                          <span>Dashboard</span>
-                        </Link>
-
-                        {user.role === "admin" && (
+                        {user.role === "admin" ? (
                           <Link
                             href="/admin"
                             role="menuitem"
@@ -215,6 +213,16 @@ export default function Navbar() {
                           >
                             <ShieldAlert size={16} className="text-amber-500" />
                             <span>Admin Panel</span>
+                          </Link>
+                        ) : (
+                          <Link
+                            href="/dashboard"
+                            role="menuitem"
+                            onClick={() => setDropdownOpen(false)}
+                            className="flex items-center gap-2.5 px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                          >
+                            <LayoutDashboard size={16} className="text-slate-400" />
+                            <span>Dashboard</span>
                           </Link>
                         )}
                       </div>
@@ -338,15 +346,7 @@ export default function Navbar() {
 
                 {isAuthenticated && (
                   <>
-                    <Link
-                      href="/dashboard"
-                      onClick={() => setMenuOpen(false)}
-                      className="px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2"
-                    >
-                      <LayoutDashboard size={18} />
-                      Dashboard
-                    </Link>
-                    {user?.role === "admin" && (
+                    {user?.role === "admin" ? (
                       <Link
                         href="/admin"
                         onClick={() => setMenuOpen(false)}
@@ -354,6 +354,15 @@ export default function Navbar() {
                       >
                         <ShieldAlert size={18} />
                         Admin Panel
+                      </Link>
+                    ) : (
+                      <Link
+                        href="/dashboard"
+                        onClick={() => setMenuOpen(false)}
+                        className="px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2"
+                      >
+                        <LayoutDashboard size={18} />
+                        Dashboard
                       </Link>
                     )}
                   </>

@@ -30,6 +30,11 @@ const UserSchema = new Schema(
     // Online presence tracking
     lastSeenAt:      { type: Date, default: null },
 
+    // Account status and deactivation
+    isActive:        { type: Boolean, default: true },
+    deactivatedAt:   { type: Date, default: null },
+    deactivatedBy:   { type: Schema.Types.ObjectId, ref: "User", default: null },
+
     // Onboarding state
     onboardingDone:  { type: Boolean, default: false },
 
@@ -43,6 +48,7 @@ const UserSchema = new Schema(
 UserSchema.index({ country: 1 });
 UserSchema.index({ isSenior: 1 });
 UserSchema.index({ country: 1, isSenior: 1 });
+UserSchema.index({ isActive: 1 });
 
 const User = mongoose.models.User || mongoose.model("User", UserSchema);
 export default User;

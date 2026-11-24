@@ -5,7 +5,7 @@
 // - lib/geo.js
 
 import assert from "node:assert/strict";
-import { classifyDiet } from "../lib/osm/dietClassifier.js";
+import { classifyDiet, applyVerifiedDiet } from "../lib/osm/dietClassifier.js";
 import {
   filterAndSortPlaces,
   defaultDietFilter,
@@ -61,7 +61,23 @@ const emptyTags = classifyDiet({});
 assert.equal(emptyTags.vegLevel, "unknown");
 assert.equal(emptyTags.nonVegLikely, false);
 
-console.log("  ✓ classifyDiet tests passed");
+// 1.8 applyVerifiedDiet tests
+const rawDiet = { vegLevel: "unknown", nonVegLikely: false };
+const pureVegOverride = applyVerifiedDiet(rawDiet, "pure_veg");
+assert.equal(pureVegOverride.vegLevel, "only");
+assert.equal(pureVegOverride.dietVerified, true);
+assert.equal(pureVegOverride.dietLabel, "pure_veg");
+
+const vegNonVegOverride = applyVerifiedDiet(rawDiet, "veg_and_nonveg");
+assert.equal(vegNonVegOverride.vegLevel, "options");
+assert.equal(vegNonVegOverride.nonVegLikely, true);
+assert.equal(vegNonVegOverride.dietVerified, true);
+
+const unlabelledDiet = applyVerifiedDiet(rawDiet, null);
+assert.equal(unlabelledDiet.dietVerified, false);
+assert.equal(unlabelledDiet.dietLabel, null);
+
+console.log("  ✓ classifyDiet and applyVerifiedDiet tests passed");
 
 // ── 2. defaultDietFilter Tests ─────────────────────────────────────────────
 console.log("▶ Testing defaultDietFilter…");

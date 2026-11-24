@@ -71,7 +71,7 @@ export default async function CommunityChatPage({ params }) {
 
   const partnerId = isRequester ? rawRecId : rawReqId;
   const partnerDoc = await User.findById(partnerId)
-    .select("name country regionGroup languages bio isSenior lastSeenAt")
+    .select("name country regionGroup languages bio isSenior lastSeenAt isActive")
     .lean();
 
   const partnerPresence = partnerDoc?._id
@@ -100,6 +100,7 @@ export default async function CommunityChatPage({ params }) {
     languages: partnerDoc?.languages || [],
     bio: partnerDoc?.bio || "",
     isSenior: Boolean(partnerDoc?.isSenior),
+    isActive: partnerDoc?.isActive !== false,
     lastSeenAt: partnerDoc?.lastSeenAt ? new Date(partnerDoc.lastSeenAt).toISOString() : null,
     online: partnerPresence.online,
   };

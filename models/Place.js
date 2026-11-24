@@ -1,6 +1,5 @@
 // models/Place.js
-// Stores student reviews and ratings for verified OpenStreetMap places.
-// Place details (name, kind, tags, hours) originate from OpenStreetMap.
+// Stores student reviews, ratings, and verified diet labels for OpenStreetMap places.
 
 import mongoose from "mongoose";
 
@@ -48,6 +47,22 @@ const PlaceSchema = new Schema(
       default: 0,
     },
     reviews: [ReviewSchema],
+
+    // Admin verified diet labeling
+    dietLabel: {
+      type: String,
+      enum: ["pure_veg", "veg_and_nonveg", "nonveg_only", null],
+      default: null,
+    },
+    dietLabelBy: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    dietLabelAt: {
+      type: Date,
+      default: null,
+    },
   },
   { timestamps: true }
 );

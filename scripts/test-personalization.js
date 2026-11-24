@@ -76,7 +76,7 @@ function isOnlyGenericContent(items, user, field = "region") {
 
 // ── Minimal Mongoose schemas for the test ─────────────────────────────────
 const GuideSchema = new mongoose.Schema({
-  category: String, title: String, region: [String], isSample: Boolean,
+  category: String, title: String, region: [String], isSample: Boolean, status: String,
 });
 const ChecklistItemSchema = new mongoose.Schema({
   title: String, region: [String], order: Number, isSample: Boolean,
@@ -145,6 +145,7 @@ async function runTests() {
     const simGuides = await Guide.find({
       ...regionQuery(testUser),
       category: "sim",
+      status: "published",
     }).lean();
     const sortedSim = sortBySpecificity(simGuides, testUser);
 
